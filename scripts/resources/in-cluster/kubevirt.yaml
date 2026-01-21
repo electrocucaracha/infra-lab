@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevirt
+  namespace: argocd
+spec:
+  project: default
+  source:
+    chart: kubevirt
+    repoURL: https://encircle360-oss.github.io/helm-charts/
+    targetRevision: 0.1.2
+    helm:
+      valuesObject:
+        namespace:
+          name: kubevirt-system
+        kubevirt:
+          configuration:
+            developerConfiguration:
+              featureGates:
+                - HostDevices
+                - EnableVirtioFsConfigVolumes
+                - EnableVirtioFsStorageVolumes
+  destination:
+    name: kubernetes-admin@cluster.local
+    namespace: kubevirt-system
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

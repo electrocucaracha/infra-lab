@@ -1,0 +1,6 @@
+.vagrant/
+insecure_keys/key*
+ipmctl.conf
+config/pdf.yml
+node_modules/
+package*.json

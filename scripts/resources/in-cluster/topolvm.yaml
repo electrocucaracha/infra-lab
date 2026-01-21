@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: topolvm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    chart: topolvm
+    repoURL: https://topolvm.github.io/topolvm
+    targetRevision: v15.9.0
+    helm:
+      valuesObject:
+        storageClasses:
+          - name: topolvm-provisioner
+            storageClass:
+              fsType: ext4
+              reclaimPolicy: Delete
+              annotations: {}
+              isDefaultClass: true
+              volumeBindingMode: Immediate
+              allowVolumeExpansion: false
+              additionalParameters: {}
+              mountOptions: []
+        lvmd:
+          deviceClasses:
+            - name: ssd
+              volume-group: myvg1 # NOTE: this value is retrieved from the overcloud cluster (sudo vgs)
+              default: true
+              spare-gb: 10
+  destination:
+    name: kubernetes-admin@cluster.local
+    namespace: topolvm-system
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
