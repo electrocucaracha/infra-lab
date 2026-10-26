@@ -6,29 +6,13 @@
 # which accompanies this distribution, and is available at
 # http://www.apache.org/licenses/LICENSE-2.0
 ##############################################################################
-debian:
-  bullseye:
-    name: debian/bullseye64
-    version: "11.20241217.1"
-rocky:
-  9:
-    name: community/rockylinux-9
-    version: "1.0.0"
 ubuntu:
-  focal:
-    name: generic/ubuntu2004
-    version: "4.3.12"
   jammy:
-    name: generic/ubuntu2204
-    version: "4.3.12"
-opensuse:
-  leap:
-    name: opensuse/Leap-15.6.x86_64
-    version: "15.6.13.356"
-fedora:
-  39:
-    name: fedora/39-cloud-base
-    version: "39.20231031.1"
-  40:
-    name: fedora/40-cloud-base
-    version: "40.20240414.0"
+    name: electrocucaracha-boxes/ubuntu-jammy
+    version: "22.04.5"
+  noble:
+    name: electrocucaracha-boxes/ubuntu-noble
+    version: "24.04.4"
+  resolute:
+    name: electrocucaracha-boxes/ubuntu-resolute
+    version: "26.04"
