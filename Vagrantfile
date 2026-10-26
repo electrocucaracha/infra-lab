@@ -54,9 +54,6 @@ File.open("#{File.dirname(__FILE__)}/scripts/resources/overcloud/hosts.yaml", 'w
   %w[kube_control_plane kube_node etcd].each do |group|
     inventory_file.puts("        #{group}:")
     inventory_file.puts('          hosts:')
-    nodes.each do |node|
-      inventory_file.puts("            #{node['name']}:") if node['roles'].include?(group.to_s)
-    end
   end
   inventory_file.puts('        k8s_cluster:')
   inventory_file.puts('          children:')
@@ -99,6 +96,7 @@ qemu_version = `qemu-system-x86_64 --version | perl -pe '($_)=/([0-9]+([.][0-9]+
 
 Vagrant.configure('2') do |config|
   config.vm.provider 'libvirt'
+  config.vm.provider 'utm'
   config.vm.provider 'virtualbox'
 
   config.vm.synced_folder './', '/vagrant'
@@ -116,14 +114,9 @@ Vagrant.configure('2') do |config|
 
   # Provide a basic configuration
   config.vm.provision 'shell', inline: <<-SHELL
-    if [ -f /etc/netplan/01-netcfg.yaml ]; then
-        sed -i "s/addresses: .*/addresses: [1.1.1.1, 8.8.8.8, 8.8.4.4]/g" /etc/netplan/01-netcfg.yaml
-        netplan apply
-    fi
-    date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)Z"
-
-    if ! command -v curl; then
-        source /etc/os-release || source /usr/lib/os-release
+    # Install curl if missing
+    if ! command -v curl >/dev/null 2>&1; then
+        . /etc/os-release || . /usr/lib/os-release
         case ${ID,,} in
             ubuntu|debian)
                 apt-get update -qq > /dev/null
@@ -175,7 +168,7 @@ Vagrant.configure('2') do |config|
         nodeconfig.vm.box_version = vagrant_boxes[node['os']['name']][node['os']['release']]['version']
       end
       nodeconfig.vm.provider 'virtualbox' do |v, _override|
-        v.customize ['modifyvm', :id, '--nested-hw-virt', 'on'] if node['roles'].include?('kube_node')
+        v.customize ['modifyvm', :id, '--nested-hw-virt', 'on']
         if node.key? 'storage_controllers'
           node['storage_controllers'].each do |storage_controller|
             # Add VirtualBox storage controllers if they weren't added before
@@ -219,8 +212,9 @@ Vagrant.configure('2') do |config|
         end
       end
       nodeconfig.vm.provider 'libvirt' do |v, _override|
+        v.graphics_type = "spice"
         v.disk_bus = 'sata'
-        v.nested = true if node['roles'].include?('kube_node')
+        v.nested = true
         v.loader = loader if node['os'] == 'clearlinux'
         v.cpu_mode = 'host-passthrough'
         if node.key? 'volumes'
@@ -234,12 +228,6 @@ Vagrant.configure('2') do |config|
           v.qemuargs value: 'pc,nvdimm=on'
           v.qemuargs value: '-m'
           v.qemuargs value: "#{node['pmem']['size']},slots=#{node['pmem']['slots']},maxmem=#{node['pmem']['max_size']}"
-          node['pmem']['vNVDIMMs'].each do |nvdimm|
-            v.qemuargs value: '-object'
-            v.qemuargs value: "memory-backend-file,id=#{nvdimm['mem_id']},share=#{nvdimm['share']},mem-path=#{nvdimm['path']},size=#{nvdimm['size']}"
-            v.qemuargs value: '-device'
-            v.qemuargs value: "nvdimm,id=#{nvdimm['id']},memdev=#{nvdimm['mem_id']},label-size=2M"
-          end
         end
         # Intel Corporation QuickAssist Technology
         if node.key? 'qat_dev'
@@ -300,34 +288,10 @@ Vagrant.configure('2') do |config|
       end
       vgs = ''
       volume_groups_dict.each { |k, v| vgs += "#{k}=#{v.join(' ')}," }
-
-      # Setup QAT nodes
-      nodeconfig.vm.provision 'shell', inline: <<-SHELL
-        source /etc/os-release || source /usr/lib/os-release
-        case ${ID,,} in
-            clear-linux-os)
-                mkdir -p /etc/kernel/{cmdline.d,cmdline-removal.d}
-                echo "module.sig_unenforce" | sudo tee /etc/kernel/cmdline.d/allow-unsigned-modules.conf
-                echo "intel_iommu=igfx_off" | sudo tee /etc/kernel/cmdline-removal.d/disable-iommu.conf
-                clr-boot-manager update
-                sudo mkdir -p /etc/systemd/resolved.conf.d
-                printf "[Resolve]\nDNSSEC=false" | sudo tee /etc/systemd/resolved.conf.d/dnssec.conf
-            ;;
-            centos)
-                curl -fsSL http://bit.ly/install_pkg | PKG=kernel PKG_UPDATE=true bash
-                sudo grub2-set-default 0
-                grub_cfg="$(sudo readlink -f /etc/grub2.cfg)"
-                if dmesg | grep EFI; then
-                    grub_cfg="/boot/efi/EFI/centos/grub.cfg"
-                fi
-                sudo grub2-mkconfig -o "$grub_cfg"
-            ;;
-        esac
-      SHELL
-      nodeconfig.vm.provision :reload if node['os'] == 'centos'
       nodeconfig.vm.provision 'shell', privileged: false do |sh|
         sh.env = {
           PKG_DEBUG: debug.to_s,
+          DEBUG: debug.to_s,
           NODE_SRIOV_NUMVFS: node.fetch('sriov_numvfs', 0),
           NODE_VOLUME_MOUNTS: volume_mounts_dict[0...-1].to_s,
           NODE_VOLUME_GROUPS: vgs[0...-1].to_s
