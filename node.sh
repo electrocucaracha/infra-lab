@@ -111,7 +111,7 @@ function install_deps {
         fi
         if ! command -v deborphan >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y -qq -o=Dpkg::Use-Pty=0 deborphan
+            sudo apt-get install -y -qq -o=Dpkg::Use-Pty=0 deborphan || :
         fi
         sudo du -sh /var/cache/apt/archives
         sudo apt-get clean
