@@ -1,0 +1,67 @@
+# SPDX-license-identifier: Apache-2.0
+##############################################################################
+# Copyright (c) 2025
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License, Version 2.0
+# which accompanies this distribution, and is available at
+# http://www.apache.org/licenses/LICENSE-2.0
+##############################################################################
+default_install_hook_types:
+  - pre-commit
+  - prepare-commit-msg
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: check-yaml
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+        args: ["-x"]
+  - repo: https://opendev.org/openstack/bashate.git
+    rev: 2.1.1
+    hooks:
+      - id: bashate
+        # E005 file does not begin with #! or have a .sh prefix
+        # E006 check for lines longer than 79 columns
+        # E042 local declaration hides errors
+        # E043 Arithmetic compound has inconsistent return semantics
+        # bashate only honors the last -i/--ignore flag it receives, so all
+        # ignored codes must be combined into a single flag.
+        args: ["-v", "-iE005,E006,E042,E043"]
+        files: .*\.sh
+        exclude: ".tox/.*"
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.21.0
+    hooks:
+      - id: yamlfmt
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+  - repo: local
+    hooks:
+      # Run via npx: newer npm rejects pre-commit's git+file install of node hooks (EALLOWGIT).
+      - id: markdownlint
+        name: markdownlint
+        entry: npx --yes markdownlint-cli@0.49.1
+        language: system
+        files: \.(md|mdown|markdown)$
+      - id: prettier-check
+        name: prettier --check
+        entry: npx prettier --check
+        language: system
+        files: \.(md|ya?ml|json)$
+      - id: jscpd-check
+        name: jscpd duplicate check
+        entry: npx jscpd --config .jscpd.json
+        language: system
+        pass_filenames: false
+  - repo: https://github.com/electrocucaracha/ai-prepare-commit-msg
+    rev: v20.6.1
+    hooks:
+      - id: ai-prepare-commit
+        stages:
+          - prepare-commit-msg
