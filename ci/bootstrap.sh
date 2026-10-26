@@ -45,12 +45,6 @@ if [[ ${TEST_MULTINODE:-false} == "false" ]]; then
     size: ${MEMORY:-6144}M # This value may affect the currentMemory libvirt tag
     slots: 2
     max_size: 128G
-    vNVDIMMs:
-      - mem_id: mem0
-        id: nv0
-        share: "on"
-        path: /dev/shm
-        size: 2G
   storage_controllers:
     - name: Virtual I/O Device SCSI controller
       type: virtio-scsi
@@ -68,11 +62,6 @@ if [[ ${TEST_MULTINODE:-false} == "false" ]]; then
       controller: ${VBOX_CONTROLLER:-Virtual I/O Device SCSI controller}
       port: 2
       device: 0
-  roles:
-    - kube_control_plane
-    - etcd
-    - kube_node
-    - qat-node
 EOL
     # editorconfig-checker-enable
     destroy_vm aio
