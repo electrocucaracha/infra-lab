@@ -154,19 +154,6 @@ function install_deps {
             curl -fsSL http://bit.ly/install_pkg | PKG=$pkgs bash
         fi
     fi
-    if systemctl list-unit-files tuned.service | grep "1 unit"; then
-        sudo sed -i "s|#\!/usr/bin/python |#\!$(command -v python2) |g" /usr/sbin/tuned
-        sudo systemctl start tuned
-        sudo systemctl enable tuned
-        # This profile favors performance over power savings by setting
-        # intel_pstate and min_perf_pct=100. It disables transparent huge pages,
-        # and automatic NUMA balancing. It also uses cpupower to set the
-        # performance cpufreq governor, and requests a cpu_dma_latency value of
-        # 1. It also sets busy_read and busy_poll times to 50 μs, and
-        # tcp_fastopen to 3.
-        sudo tuned-adm profile network-latency
-    fi
-
     # Free up space
     if command -v deborphan >/dev/null; then
         eval "sudo apt-get remove --purge -y $(deborphan)" || :
@@ -290,18 +277,12 @@ fi
 setup_sysctl "fs.inotify.max_user_watches" "2099999999"
 setup_sysctl "fs.inotify.max_user_instances" "2099999999"
 setup_sysctl "fs.inotify.max_queued_events" "2099999999"
-# rbd - Rook Ceph requires a Linux kernel built with the RBD module
 # ip6table_filter - Ensure Filter IP6 table exists
-for kmod in rbd ip6table_filter; do
-    ensure_kmod "$kmod"
-done
+ensure_kmod ip6table_filter
 install_deps
 mount_partitions
 create_volume_groups
 disable_k8s_ports
-create_pmem_namespaces
-enable_nvdimm_mixed_mode
-create_simulated_sriov_dev "${NODE_SRIOV_NUMVFS-0}"
 
 if [ "$DEBUG" == "true" ]; then
     if command -v lstopo-no-graphics >/dev/null; then
