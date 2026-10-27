@@ -53,7 +53,9 @@ File.open("#{File.dirname(__FILE__)}/scripts/resources/overcloud/hosts.yaml", 'w
   inventory_file.puts('      children:')
   %w[kube_control_plane kube_node etcd].each do |group|
     inventory_file.puts("        #{group}:")
+    members = nodes.select { |node| node.fetch('roles', []).include?(group) }
     inventory_file.puts('          hosts:')
+    members.each { |node| inventory_file.puts("            #{node['name']}:") }
   end
   inventory_file.puts('        k8s_cluster:')
   inventory_file.puts('          children:')
