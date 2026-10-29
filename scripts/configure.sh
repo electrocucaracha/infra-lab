@@ -36,45 +36,55 @@ function _create_in_cluster {
         kubectl wait --for=condition=Ready --all pods -n kube-system
     fi
 
-    kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl config use-context "kind-$KIND_CLUSTER_NAME"
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
     kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
     sleep 5
     kubectl wait --for=condition=Ready --all pods -n argocd --timeout 10m
 }
 
 function _deploy_in_cluster_apps {
-    kubectl apply -f resources/in-cluster/
+    kubectl apply -f resources/in-cluster/kubean.yaml
 
     kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' -n argocd service/argocd-server
-    argocd login $(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}') --insecure --username admin --password $(argocd admin initial-password -n argocd | head -n 1)
+    set +o xtrace
+    argocd login "$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')" --insecure --username admin --password "$(argocd admin initial-password -n argocd | head -n 1)"
+    [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
 
-    for app in $(argocd app list -c "$(argocd cluster list | grep in-cluster | awk '{print $1}')" -o name); do
-        argocd app sync "${app#*/}"
-    done
+    argocd app sync kubean
+    argocd app wait kubean --sync --health --timeout 600
+    kubectl wait --for=condition=Established crd/clusters.kubean.io crd/clusteroperations.kubean.io --timeout=120s
 }
 
 function _create_infra {
     kubectl apply -f resources/overcloud/
-    sleep 5m
-    kubectl wait --for=condition=Complete job.batch/kubean-install-ops-job -n kubean-system --timeout 10m
+    kubectl wait --for=create job.batch/kubean-install-ops-job -n kubean-system --timeout=10m
+    kubectl wait --for=condition=Complete job.batch/kubean-install-ops-job -n kubean-system --timeout=30m
+    umask 077
     kubectl -n kubean-system get configmap infra-lab-kubeconf -o jsonpath='{.data.config}' >/tmp/kubeconfig.yml
     kubectl konfig import --save /tmp/kubeconfig.yml
-    argocd cluster add "$(kubectl config current-context --kubeconfig /tmp/kubeconfig.yml)" -y --project infra-lab
+    argocd cluster add "$(kubectl config current-context --kubeconfig /tmp/kubeconfig.yml)" -y --name infra-lab --upsert
 }
 
 function _deploy_infra_apps {
-    local cluster=$(argocd cluster list | grep infra-lab | awk '{print $2}')
+    local app
 
-    # TopoLVM
-    cert_manager_deployed="true"
-    kubectl get deployments cert-manager -n cert-manager --context "$cluster" >/dev/null && cert_manager_deployed="false"
-    argocd app set topolvm -p "cert-manager.enabled=$cert_manager_deployed"
-    replica_count=$(kubectl get node --selector='!node-role.kubernetes.io/master' -o=jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' --context "$cluster" | wc -l)
-    argocd app set topolvm -p "controller.replicaCount=$replica_count"
-
-    for app in $(argocd app list -c "$cluster" -o name); do
-        argocd app sync "${app#*/}"
+    for app in topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc; do
+        kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml"
+        argocd app sync "$app"
+        argocd app wait "$app" --sync --health --timeout 600
+        case "$app" in
+        kubevirt)
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available kubevirt/kubevirt -n kubevirt-system --timeout=10m
+            ;;
+        cdi)
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available cdi/cdi --timeout=10m
+            ;;
+        tekton)
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Ready tektonconfig/config --timeout=10m
+            ;;
+        esac
     done
 }
 
@@ -85,6 +95,7 @@ function main {
 
     _create_infra
     _deploy_infra_apps
+    kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f resources/bootstrap.yaml
 }
 
 if [[ ${__name__:-"__main__"} == "__main__" ]]; then

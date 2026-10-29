@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevirt-tekton-tasks
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/electrocucaracha/infra-lab.git
+    targetRevision: HEAD
+    path: scripts/resources/ci/kubevirt-tekton-tasks
+  destination:
+    name: infra-lab
+    namespace: default
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
