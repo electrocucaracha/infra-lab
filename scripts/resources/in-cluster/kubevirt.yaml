@@ -17,12 +17,15 @@ spec:
           configuration:
             developerConfiguration:
               featureGates:
-                - HostDevices
                 - EnableVirtioFsConfigVolumes
                 - EnableVirtioFsStorageVolumes
+            network:
+              permitBridgeInterfaceOnPodNetwork: true
   destination:
-    name: kubernetes-admin@cluster.local
+    name: infra-lab
     namespace: kubevirt-system
   syncPolicy:
+    automated:
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
