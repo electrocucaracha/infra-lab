@@ -319,7 +319,7 @@ Vagrant.configure('2') do |config|
     installer.vm.hostname = 'undercloud'
     installer.vm.box = installer_box['name']
     installer.vm.box_version = installer_box['version']
-    installer.vm.network :forwarded_port, guest: 9090, host: 9090
+    installer.vm.network :forwarded_port, guest_ip: "172.80.0.3", guest: 80, host: 8080
 
     %w[virtualbox libvirt].each do |provider|
       installer.vm.provider provider do |p|
