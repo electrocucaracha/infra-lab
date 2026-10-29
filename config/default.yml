@@ -45,79 +45,34 @@
 - name: "compute01"
   os:
     name: "ubuntu"
-    release: "focal"
+    release: "jammy"
   networks:
     - name: public-net
       ip: "10.10.16.6"
   memory: 32768
-  sriov_numvfs: 3
-  qat_dev:
-    - "3d:00.0"
-  sriov_dev:
-    - "41:02.0"
-    - "41:02.1"
-    - "41:02.2"
-    - "41:02.3"
-    - "41:02.4"
-    - "41:02.5"
-    - "41:02.6"
-    - "41:02.7"
   cpus: 16
-  numa_nodes: # Total memory for NUMA nodes must be equal to RAM size
-    - cpus: 0-3
-      memory: 8192
-    - cpus: 4-7
-      memory: 8192
-    - cpus: 8-11
-      memory: 8192
-    - cpus: 12-15
-      memory: 8192
   volumes:
     - name: sdb
-      size: 25
-      mount: /var/lib/docker/
+      size: 200
+      volume_group: csi-vgs
       port: 1
       device: 0
-    - name: sdc
-      size: 50
-      port: 1
-      device: 1
   roles:
     - kube_node
-    - qat-node
 - name: "compute02"
   os:
     name: "ubuntu"
-    release: "focal"
+    release: "jammy"
   networks:
     - name: public-net
       ip: "10.10.16.7"
-  memory: 8192
-  pmem:
-    size: 8G # This value may affect the currentMemory libvirt tag
-    slots: 4
-    max_size: 32G
-    vNVDIMMs:
-      - mem_id: mem0
-        id: nv0
-        share: "on"
-        path: /dev/shm
-        size: 4G
-      - mem_id: mem1
-        id: nv1
-        share: "on"
-        path: /dev/shm
-        size: 4G
+  memory: 32768
   cpus: 4
   volumes:
-    - name: sdc
-      size: 25
-      mount: /var/lib/docker/
+    - name: sdb
+      size: 200
+      volume_group: csi-vgs
       port: 1
       device: 0
-    - name: sdd
-      size: 50
-      port: 1
-      device: 1
   roles:
     - kube_node
