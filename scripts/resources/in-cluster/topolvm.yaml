@@ -8,9 +8,28 @@ spec:
   source:
     chart: topolvm
     repoURL: https://topolvm.github.io/topolvm
-    targetRevision: v15.9.0
+    targetRevision: 15.9.0
     helm:
       valuesObject:
+        cert-manager:
+          enabled: false
+        controller:
+          affinity: |
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchExpressions:
+                        - key: app.kubernetes.io/component
+                          operator: In
+                          values:
+                            - controller
+                        - key: app.kubernetes.io/name
+                          operator: In
+                          values:
+                            - topolvm
+                    topologyKey: kubernetes.io/hostname
         storageClasses:
           - name: topolvm-provisioner
             storageClass:
@@ -18,19 +37,21 @@ spec:
               reclaimPolicy: Delete
               annotations: {}
               isDefaultClass: true
-              volumeBindingMode: Immediate
-              allowVolumeExpansion: false
+              volumeBindingMode: WaitForFirstConsumer
+              allowVolumeExpansion: true
               additionalParameters: {}
               mountOptions: []
         lvmd:
           deviceClasses:
             - name: ssd
-              volume-group: myvg1 # NOTE: this value is retrieved from the overcloud cluster (sudo vgs)
+              volume-group: csi-vgs
               default: true
-              spare-gb: 10
+              spare-gb: 1
   destination:
-    name: kubernetes-admin@cluster.local
+    name: infra-lab
     namespace: topolvm-system
   syncPolicy:
+    automated:
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
