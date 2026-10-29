@@ -3,3 +3,17 @@ kind: Kustomization
 resources:
   - https://github.com/tektoncd/operator/releases/download/v0.81.2/release.yaml
   - https://raw.githubusercontent.com/tektoncd/operator/v0.81.2/config/crs/kubernetes/config/lite/operator_v1alpha1_config_cr.yaml
+patches:
+  - target:
+      group: operator.tekton.dev
+      version: v1alpha1
+      kind: TektonConfig
+      name: config
+    patch: |-
+      apiVersion: operator.tekton.dev/v1alpha1
+      kind: TektonConfig
+      metadata:
+        name: config
+      spec:
+        pruner:
+          disabled: false
