@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tekton
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/electrocucaracha/infra-lab.git
+    targetRevision: HEAD
+    path: scripts/resources/ci/tekton
+  destination:
+    name: infra-lab
+    namespace: tekton-operator
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
