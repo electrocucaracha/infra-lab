@@ -58,10 +58,14 @@ if [[ ${TEST_MULTINODE:-false} == "false" ]]; then
       device: 0
     - name: sdc
       size: 50
-      volume_group: myvg1
+      volume_group: csi-vgs
       controller: ${VBOX_CONTROLLER:-Virtual I/O Device SCSI controller}
       port: 2
       device: 0
+  roles:
+    - kube_control_plane
+    - etcd
+    - kube_node
 EOL
     # editorconfig-checker-enable
     destroy_vm aio
@@ -116,6 +120,12 @@ EOL
       mount: /var/lib/docker/
       controller: ${VBOX_CONTROLLER:-Virtual I/O Device SCSI controller}
       port: 1
+      device: 0
+    - name: sdc
+      size: 50
+      volume_group: csi-vgs
+      controller: ${VBOX_CONTROLLER:-Virtual I/O Device SCSI controller}
+      port: 2
       device: 0
   roles:
     - kube_node
