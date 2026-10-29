@@ -10,6 +10,16 @@
 
 ## Overview
 
-The **Infra-lab** project provides instructions and tooling to deploy a Kubernetes cluster designed to support self-hosted GitHub Actions runners. The cluster is provisioned using **Kubean**, a Kubespray-based Kubernetes lifecycle management operator, ensuring a reliable and repeatable installation process.
+The **Infra-lab** project provides instructions and tooling
+to deploy a Kubernetes cluster designed to support self-hosted
+GitHub Actions runners.
+The cluster is provisioned using **Kubean**,
+a Kubespray-based Kubernetes lifecycle management operator,
+ensuring a reliable and repeatable installation process.
 
-Application deployment and configuration management are handled through **Argo CD**, enabling a GitOps-based workflow for continuous delivery and cluster state management. This approach ensures consistency, traceability, and automated synchronization between declared configurations and the running cluster.
+Application deployment and configuration management use **Argo CD**,
+enabling a GitOps-based workflow for continuous delivery
+and cluster state management.
+This approach provides consistency, traceability,
+and automated synchronization between declared configurations
+and the running cluster.

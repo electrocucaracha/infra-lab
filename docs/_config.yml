@@ -1,0 +1,15 @@
+title: Infra Lab
+description: GitOps-managed infrastructure for KubeVirt-based GitHub Actions runners.
+url: https://electrocucaracha.github.io
+baseurl: /infra-lab
+remote_theme: just-the-docs/just-the-docs
+enable_copy_code_button: true
+search_enabled: true
+heading_anchors: true
+aux_links:
+  Infra Lab on GitHub:
+    - https://github.com/electrocucaracha/infra-lab
+aux_links_new_tab: true
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
