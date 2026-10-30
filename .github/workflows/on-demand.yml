@@ -1,0 +1,133 @@
+# SPDX-license-identifier: Apache-2.0
+##############################################################################
+# Copyright (c) 2026
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Apache License, Version 2.0
+# which accompanies this distribution, and is available at
+# http://www.apache.org/licenses/LICENSE-2.0
+##############################################################################
+name: Validate Changes
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      components: >-
+        ${{ steps.filter.outputs.shared == 'true' && '["topolvm","kubevirt","cdi","tekton","kubevirt-tekton-tasks","arc"]' || steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check shell syntax
+        run: for script in ci/*.sh scripts/configure.sh; do bash -n "$script"; done
+      - name: Lint shell scripts
+        run: shellcheck -e SC1091 ci/*.sh scripts/configure.sh
+      - name: Check Python syntax
+        run: python3 -c 'import ast; from pathlib import Path; ast.parse(Path("ci/update_versions.py").read_text())'
+      - name: Check component selection and smoke manifests
+        run: bash ci/check_components.sh
+      - name: Validate YAML and release pins
+        run: ruby ci/check_release_pins.rb
+      - name: Filter changes
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          token: ${{ github.token }}
+          predicate-quantifier: every
+          filters: |
+            shared:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+              - '!.gitignore'
+              - '!.vscode/**'
+              - '!scripts/resources/in-cluster/{topolvm,kubevirt,cdi,tekton,kubevirt-tekton-tasks,arc}.yaml'
+              - '!scripts/resources/ci/{cdi,tekton,kubevirt-tekton-tasks}/**'
+              - '!ci/resources/{topolvm,kubevirt,cdi,tekton}.yaml'
+            topolvm:
+              - '{scripts/resources/in-cluster/topolvm.yaml,ci/resources/topolvm.yaml}'
+            kubevirt:
+              - '{scripts/resources/in-cluster/kubevirt.yaml,ci/resources/kubevirt.yaml}'
+            cdi:
+              - '{scripts/resources/in-cluster/cdi.yaml,scripts/resources/ci/cdi/**,ci/resources/cdi.yaml}'
+            tekton:
+              - '{scripts/resources/in-cluster/tekton.yaml,scripts/resources/ci/tekton/**,ci/resources/tekton.yaml}'
+            kubevirt-tekton-tasks:
+              - '{scripts/resources/in-cluster/kubevirt-tekton-tasks.yaml,scripts/resources/ci/kubevirt-tekton-tasks/**}'
+            arc:
+              - 'scripts/resources/in-cluster/arc.yaml'
+  validate:
+    name: Validate ${{ matrix.component }}
+    needs: plan
+    if: >-
+      needs.plan.outputs.components != '[]' && github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.plan.outputs.components) }}
+    runs-on: vm-self-hosted
+    environment: ci-validation
+    timeout-minutes: 90
+    env:
+      HOST_INSTALLER: "true"
+      VAGRANT_DEFAULT_PROVIDER: virtualbox
+      SUDO_VAGRANT_CMD: "true"
+      INFRA_COMPONENTS: ${{ matrix.component }}
+      INFRA_REVISION: ${{ github.event.pull_request.head.sha }}
+      DEBUG: "false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Allow VirtualBox lab subnet
+        run: |
+          sudo -n mkdir -p /etc/vbox
+          printf '%s\n' '* 10.10.16.0/24' | sudo -n tee -a /etc/vbox/networks.conf
+      - name: Provision nested AIO VM
+        working-directory: ci
+        run: ./bootstrap.sh
+      - name: Install selected components from the PR
+        working-directory: ci
+        run: ./provision_installer.sh
+      - name: Run selected validators
+        run: ./ci/validate_components.sh
+      - name: Report AIO VM status
+        if: failure()
+        run: sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant status aio || true
+      - name: Report VirtualBox VM logs
+        if: failure()
+        run: |
+          if sudo -n test -f .vagrant/machines/aio/virtualbox/id; then
+            vm_id=$(sudo -n cat .vagrant/machines/aio/virtualbox/id)
+            sudo -n VBoxManage showvminfo "$vm_id" --machinereadable || true
+            sudo -n VBoxManage showvminfo "$vm_id" --log 0 | tail -n 300 || true
+          fi
+      - name: Report AIO guest logs
+        if: failure()
+        run: |
+          timeout 90s sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant ssh aio --command '
+            sudo journalctl -b -u kubelet -u containerd -n 250 --no-pager || true
+            sudo journalctl -b -k -n 100 --no-pager || true
+            sudo tail -n 200 /home/vagrant/node.log || true
+          ' || true
+      - name: Report cluster diagnostics
+        if: failure()
+        run: |
+          kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide || true
+          kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp || true
+          kubectl --context kind-in-cluster -n argocd get applications || true
+      - name: Clean up lab resources
+        if: always()
+        run: |
+          result=0
+          sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant destroy -f aio || result=1
+          sudo -n kind delete cluster --name in-cluster || result=1
+          sudo -n docker compose -f scripts/compose.yaml down --volumes || result=1
+          rm -f /tmp/kubeconfig.yml
+          exit "$result"
