@@ -29,7 +29,7 @@ export PATH="$PATH:${KREW_ROOT:-${_REMOTE_USER_HOME-$HOME}/.krew}/bin"
 
 function _create_in_cluster {
     if ! sudo "$(command -v kind)" get clusters | grep -e "$KIND_CLUSTER_NAME"; then
-        sudo -E kind create cluster
+        sudo -E kind create cluster --config resources/management/kind.yaml
         mkdir -p "$HOME/.kube"
         sudo chown -R "$USER": "$HOME/.kube"
         sudo -E kind get kubeconfig | tee "$HOME/.kube/config"
@@ -38,7 +38,7 @@ function _create_in_cluster {
 
     kubectl config use-context "kind-$KIND_CLUSTER_NAME"
     kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-    kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl apply --server-side -n argocd -k resources/management/argocd
     kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
     sleep 5
     kubectl wait --for=condition=Ready --all pods -n argocd --timeout 10m
@@ -69,9 +69,41 @@ function _create_infra {
 
 function _deploy_infra_apps {
     local app
+    local requested=" ${INFRA_COMPONENTS:-topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc} "
+    local components=()
 
+    for app in $requested; do
+        case "$app" in
+        topolvm | kubevirt | cdi | tekton | kubevirt-tekton-tasks | arc) ;;
+        *)
+            printf 'Unknown infrastructure component: %s\n' "$app" >&2
+            return 1
+            ;;
+        esac
+    done
+    if [[ $requested == *" kubevirt-tekton-tasks "* ]]; then
+        requested+="topolvm kubevirt cdi tekton "
+    fi
+    if [[ $requested == *" cdi "* ]]; then
+        requested+="topolvm kubevirt "
+    fi
     for app in topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc; do
-        kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml"
+        [[ $requested != *" $app "* ]] || components+=("$app")
+    done
+
+    for app in "${components[@]}"; do
+        case "$app" in
+        cdi | tekton | kubevirt-tekton-tasks)
+            if [[ -n ${INFRA_REVISION:-} ]]; then
+                kubectl patch --local --type=merge -f "resources/in-cluster/$app.yaml" \
+                    -p "$(jq -cn --arg revision "$INFRA_REVISION" '{spec: {source: {targetRevision: $revision}}}')" -o yaml |
+                    kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f -
+            else
+                kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml"
+            fi
+            ;;
+        *) kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml" ;;
+        esac
         argocd app sync "$app"
         argocd app wait "$app" --sync --health --timeout 600
         case "$app" in
@@ -95,7 +127,9 @@ function main {
 
     _create_infra
     _deploy_infra_apps
-    kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f resources/bootstrap.yaml
+    if [[ -z ${INFRA_COMPONENTS:-} ]]; then
+        kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f resources/bootstrap.yaml
+    fi
 }
 
 if [[ ${__name__:-"__main__"} == "__main__" ]]; then

@@ -1,0 +1,24 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachineInstance
+metadata:
+  name: vm-smoke
+spec:
+  domain:
+    devices:
+      disks:
+        - name: root
+          disk:
+            bus: virtio
+      interfaces:
+        - name: default
+          masquerade: {}
+    resources:
+      requests:
+        memory: 128Mi
+  networks:
+    - name: default
+      pod: {}
+  volumes:
+    - name: root
+      containerDisk:
+        image: quay.io/kubevirt/cirros-container-disk-demo:v1.6.0

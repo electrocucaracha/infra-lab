@@ -50,12 +50,15 @@ The installer does not autostart with an untargeted `vagrant up`.
 
 ## Environment Settings
 
-| Setting                   | Default                                                         | Scope                                        |
-| ------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
-| `DEBUG` in `defaults.env` | `ACTIONS_RUNNER_DEBUG`, then `ACTIONS_STEP_DEBUG`, then `false` | Node preparation shell tracing               |
-| `HUGEPAGES_ENABLED`       | `false`                                                         | Hugepage preparation in `node.sh`            |
-| `PROVISION_PHASES`        | `install configure`                                             | Ordered phases executed by `scripts/main.sh` |
-| `VAGRANT_NFS_VERSION`     | `3`                                                             | libvirt shared-folder NFS version            |
+| Setting                   | Default                                                         | Scope                                                               |
+| ------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `DEBUG` in `defaults.env` | `ACTIONS_RUNNER_DEBUG`, then `ACTIONS_STEP_DEBUG`, then `false` | Node preparation shell tracing                                      |
+| `HUGEPAGES_ENABLED`       | `false`                                                         | Hugepage preparation in `node.sh`                                   |
+| `PROVISION_PHASES`        | `install configure`                                             | Ordered phases executed by `scripts/main.sh`                        |
+| `VAGRANT_NFS_VERSION`     | `3`                                                             | libvirt shared-folder NFS version                                   |
+| `HOST_INSTALLER`          | `false`                                                         | Run the installer on the host instead of an installer VM            |
+| `INFRA_COMPONENTS`        | All platform applications                                       | Space-separated application selection; adds required dependencies   |
+| `INFRA_REVISION`          | Application manifest revision                                   | Git revision for CDI, Tekton, and KubeVirt Tekton task applications |
 
 The Vagrantfile separately defaults its guest `DEBUG` setting to `true`
 when the host does not supply `DEBUG`.
@@ -77,6 +80,23 @@ and `targetRevision: HEAD`.
 `HEAD` follows the repository's default branch.
 The Helm-backed applications instead select chart versions;
 the Kustomizations select pinned upstream release URLs.
+CI sets `INFRA_REVISION` to the PR head commit before applying Git-backed applications.
+See [Validate platform updates](../how-to-guides/connect-runner-workloads.md#validate-platform-updates)
+for scheduled updates and self-hosted runner requirements.
+
+## Runtime Release Pins
+
+Helm-backed applications pin chart releases in `spec.source.targetRevision`.
+The component Kustomizations pin upstream release URLs.
+`scripts/resources/management/kind.yaml` pins the management-cluster node image,
+and `scripts/resources/management/argocd/kustomization.yaml` pins the Argo CD server release.
+The management CLI installers are separate from these runtime pins.
+
+`ci/update_versions.sh` discovers newer stable releases and changes the resource pins.
+PR validation checks those pins offline, then deploys the checked-out versions;
+it does not query upstream services to choose versions.
+Git-backed Application revisions identify repository commits, not component releases,
+so `INFRA_REVISION` still selects the PR's Kustomizations during validation.
 
 ## Kubernetes Settings
 

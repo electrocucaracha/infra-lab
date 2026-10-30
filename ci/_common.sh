@@ -34,7 +34,7 @@ fi
 
 VAGRANT_CMD=""
 if [[ ${SUDO_VAGRANT_CMD:-false} == "true" ]]; then
-    VAGRANT_CMD="sudo -H"
+    VAGRANT_CMD="sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER"
 fi
 VAGRANT_CMD+=" $(command -v vagrant)"
 # shellcheck disable=SC2034

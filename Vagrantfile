@@ -156,7 +156,7 @@ Vagrant.configure('2') do |config|
       if node.key? 'networks'
         node['networks'].each do |network|
           nodeconfig.vm.network :private_network, ip: network['ip'], type: :static,
-                                                  libvirt__network_name: network['name'], nic_type: 'virtio', virtualbox__intnet: true
+                                                  libvirt__network_name: network['name'], nic_type: 'virtio', virtualbox__intnet: ENV.fetch('HOST_INSTALLER', 'false') != 'true'
         end
       end
       %i[virtualbox libvirt].each do |provider|

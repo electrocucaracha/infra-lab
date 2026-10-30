@@ -139,4 +139,12 @@ EOL
 fi
 
 info "Provision target node"
-$VAGRANT_CMD_UP
+if [[ ${HOST_INSTALLER:-false} == "true" ]]; then
+    if [[ ${TEST_MULTINODE:-false} == "false" ]]; then
+        $VAGRANT_CMD_UP aio
+    else
+        $VAGRANT_CMD_UP controller worker01 worker02
+    fi
+else
+    $VAGRANT_CMD_UP
+fi

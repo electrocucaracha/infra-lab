@@ -1,0 +1,10 @@
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: task-smoke
+spec:
+  taskSpec:
+    steps:
+      - name: execute
+        image: alpine:3.21.3
+        command: [sh, -ec, 'test "$(printf infra-lab)" = infra-lab']

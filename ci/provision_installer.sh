@@ -15,8 +15,10 @@ set -o pipefail
 # shellcheck source=ci/_common.sh
 source _common.sh
 
-if [ "$($VAGRANT_CMD status installer | grep "^installer" | awk '{ print $2}')" != "running" ] && [[ ${HOST_INSTALLER-false} == "false" ]]; then
+if [[ ${HOST_INSTALLER:-false} == "true" ]]; then
+    run_installer_cmd scripts bash ./main.sh
+elif [ "$($VAGRANT_CMD status installer | grep "^installer" | awk '{ print $2}')" != "running" ]; then
     $VAGRANT_CMD_UP installer
 else
-    run_installer_cmd . ./scripts/main.sh
+    run_installer_cmd scripts bash ./main.sh
 fi
