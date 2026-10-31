@@ -71,7 +71,14 @@ def release(repository: str) -> str:
     data = json.loads(fetch(url, token))
     version = data["tag_name"]
     if not re.fullmatch(r"v?\d+(?:\.\d+){1,2}", version):
-        raise ValueError(f"Unexpected release tag: {version}")
+        releases = json.loads(fetch(url.replace("/latest", "?per_page=100"), token))
+        version = latest(
+            entry["tag_name"]
+            for entry in releases
+            if not entry["draft"]
+            and not entry["prerelease"]
+            and re.fullmatch(r"v?\d+(?:\.\d+){1,2}", entry["tag_name"])
+        )
     return version
 
 
