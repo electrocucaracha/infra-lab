@@ -8,10 +8,3 @@ metadata:
   name: storage-smoke
 status:
   phase: Bound
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: storage-smoke
-status:
-  phase: Succeeded

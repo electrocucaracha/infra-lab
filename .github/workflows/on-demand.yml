@@ -32,8 +32,8 @@ jobs:
         run: python3 -c 'import ast; from pathlib import Path; ast.parse(Path("ci/update_versions.py").read_text())'
       - name: Check component selection and KUTTL test cases
         run: bash ci/check_components.sh
-      - name: Check KUTTL component selectors
-        run: ruby tests/ci.rb -n test_kuttl_cases_cover_each_component
+      - name: Check KUTTL and version-updater contracts
+        run: ruby tests/ci.rb -n '/test_(kuttl_|version_updater_)/'
       - name: Validate YAML and release pins
         run: ruby ci/check_release_pins.rb
       - name: Filter changes
@@ -51,10 +51,9 @@ jobs:
               - '!.vscode/**'
               - '!scripts/resources/in-cluster/{topolvm,kubevirt,cdi,tekton,kubevirt-tekton-tasks,arc}.yaml'
               - '!scripts/resources/ci/{cdi,tekton,kubevirt-tekton-tasks}/**'
-              - '!ci/resources/topolvm.yaml'
               - '!ci/kuttl/tests/{topolvm,kubevirt,cdi,tekton,kubevirt-tekton-tasks,arc}/**'
             topolvm:
-              - '{scripts/resources/in-cluster/topolvm.yaml,ci/resources/topolvm.yaml,ci/kuttl/tests/topolvm/**}'
+              - '{scripts/resources/in-cluster/topolvm.yaml,ci/kuttl/tests/topolvm/**}'
             kubevirt:
               - '{scripts/resources/in-cluster/kubevirt.yaml,ci/kuttl/tests/kubevirt/**}'
             cdi:

@@ -1,4 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - command: kubectl wait --for=condition=Available deployment --all -n arc-system --timeout=300s
+  - script: |
+      set -eu
+      deployments=$(kubectl -n arc-system get deployments -o name)
+      if [ -z "$deployments" ]; then
+          printf 'No ARC deployments found in arc-system\n' >&2
+          exit 1
+      fi
+      for deployment in $deployments; do
+          kubectl -n arc-system rollout status "$deployment" --timeout=5m
+      done
+    timeout: -1

@@ -17,6 +17,10 @@ function source {
 function get_status { return 1; }
 function kubectl {
     printf 'kubectl %s\n' "$*" >>"$log"
+    if [[ ${CHECK_KUTTL_TESTS:-false} == true && -n ${EXPECTED_KUBECONFIG:-} && $KUBECONFIG != "$EXPECTED_KUBECONFIG" ]]; then
+        printf 'Expected kubeconfig %s, got %s\n' "$EXPECTED_KUBECONFIG" "$KUBECONFIG" >&2
+        return 1
+    fi
     [[ ${CHECK_KUTTL_TESTS:-false} == false || ${MOCK_KUTTL_FAILURE:-false} == false ]]
 }
 function argocd { printf 'argocd %s\n' "$*" >>"$log"; }
@@ -73,11 +77,14 @@ export log
 export -f kubectl
 : >"$log"
 pushd "$home" >/dev/null
-INFRA_COMPONENTS='topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc' bash "$repo/ci/validate_components.sh"
+INFRA_COMPONENTS='topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc' \
+    KUBECONFIG=relative.yml EXPECTED_KUBECONFIG="$home/relative.yml" \
+    bash "$repo/ci/validate_components.sh"
 popd >/dev/null
 for component in topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc; do
     grep -Fq -- "kubectl kuttl test --test-run-labels component=$component" "$log"
 done
+[[ $(grep -c 'kubectl kuttl test' "$log") == 6 ]]
 if grep -q 'namespace infra-lab-ci' "$log"; then
     printf 'KUTTL must manage its own test namespace\n' >&2
     exit 1
@@ -87,5 +94,11 @@ if INFRA_COMPONENTS=tekton MOCK_KUTTL_FAILURE=true bash ci/validate_components.s
     printf 'KUTTL failures must fail validation\n' >&2
     exit 1
 fi
+: >"$log"
+if INFRA_COMPONENTS='tekton unknown' bash ci/validate_components.sh; then
+    printf 'Unknown validators must fail before running KUTTL\n' >&2
+    exit 1
+fi
+[[ ! -s $log ]]
 
 printf 'Component selection, PR revision, and KUTTL test selection checks passed\n'

@@ -1,4 +1,28 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - command: kubectl apply -n $NAMESPACE -f $INFRA_LAB_ROOT/ci/resources/topolvm.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-smoke
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: topolvm-provisioner
+  resources:
+    requests:
+      storage: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-smoke
+spec:
+  restartPolicy: Never
+  containers:
+    - name: write-read
+      image: alpine:3.21.3
+      command: [sh, -ec, 'echo infra-lab > /data/check; test "$(cat /data/check)" = infra-lab']
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: storage-smoke

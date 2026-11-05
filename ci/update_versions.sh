@@ -13,8 +13,9 @@ for path in scripts/resources/ci/{tekton,cdi,kubevirt-tekton-tasks}/kustomizatio
     }
 done
 
-if [ ! command -v uv ] >/dev/null 2>&1; then
-    curl -sSL https://install.astral.sh/uv | sh
+if ! command -v uv >/dev/null 2>&1; then
+    curl -fsSL https://install.astral.sh/uv | UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=1 sh
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 ./ci/update_versions.py
 uvx pre-commit autoupdate

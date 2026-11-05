@@ -108,7 +108,8 @@ personal access token that can push update branches and create pull requests.
 Unlike PRs created using `GITHUB_TOKEN`, these PRs can trigger validation workflows.
 Enable Actions and allow the repository to call `electrocucaracha/gh-workflows`.
 
-`ci/update_versions.sh` requires `uv` and network access.
+`ci/update_versions.sh` requires network access. It reuses an existing `uv`
+or installs it in `$HOME/.local/bin` and adds that directory to its `PATH`.
 It runs `ci/update_versions.py` using its inline Python 3.12+ requirement
 and pinned dependencies; `uv` manages and caches the isolated environment.
 It updates stable Helm chart versions from chart indexes and the ARC OCI registry,
@@ -179,10 +180,12 @@ One failed component does not cancel the other matrix jobs.
 Smoke checks cover TopoLVM volume binding and read/write,
 KubeVirt VMI readiness, CDI blank-volume creation, Tekton TaskRun execution,
 KubeVirt task availability, and ARC controller rollout.
-The Kubernetes smoke tests are in `ci/kuttl/tests/<component>/`
-(the TopoLVM case applies `ci/resources/topolvm.yaml`);
+The Kubernetes smoke manifests and assertions are in `ci/kuttl/tests/<component>/`;
 `ci/validate_components.sh` runs the matching KUTTL test case against the
 workload cluster. Changes to a test case select that component's validator.
+KUTTL creates and cleans up an isolated namespace for each test case.
+TopoLVM waits up to five minutes each for volume binding and pod completion.
+ARC checks every controller deployment's rollout, with a five-minute timeout per deployment.
 ARC registration and task-based golden-image builds still require the separate
 workload configuration described above; these checks do not certify them.
 Cleanup removes the AIO VM, management kind cluster, Compose resources, and exported kubeconfig.

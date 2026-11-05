@@ -25,8 +25,10 @@ The caller grants the reusable job contents and pull-request write permissions.
 Configure the `WORKFLOW_TOKEN` repository secret with permission to push update
 branches and create pull requests. Use credentials whose pull requests can
 trigger other workflows; pull requests created with the default `GITHUB_TOKEN`
-do not normally trigger them. The update runner needs `uv` and network access to
-the upstream release services. Concurrent scheduled update runs use the same
+do not normally trigger them. The updater reuses `uv` when available; otherwise,
+it installs `uv` in `$HOME/.local/bin` and adds that directory to its `PATH`.
+The update runner needs network access to the installer and upstream release
+services. Concurrent scheduled update runs use the same
 concurrency group without cancelling an active run.
 
 ## Pull Request Validation
@@ -37,6 +39,10 @@ The `plan` job runs on `ubuntu-latest` and performs:
 - Python syntax validation.
 - Mocked component-selection and KUTTL test-selection checks through
   [ci/check_components.sh](../../ci/check_components.sh).
+- KUTTL smoke-resource, timeout, and ARC rollout regression tests through
+  [tests/ci.rb](../../tests/ci.rb).
+- Mocked updater checks for existing or missing `uv` and installation failures
+  through [tests/ci.rb](../../tests/ci.rb).
 - YAML parsing and release-pin validation through
   [ci/check_release_pins.rb](../../ci/check_release_pins.rb).
 - Changed-file classification using a commit-pinned `dorny/paths-filter` action.

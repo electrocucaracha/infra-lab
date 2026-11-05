@@ -4,10 +4,12 @@ set -o nounset
 set -o pipefail
 
 export KUBECONFIG=${KUBECONFIG:-/tmp/kubeconfig.yml}
+case "$KUBECONFIG" in
+/*) ;;
+*) export KUBECONFIG="$PWD/$KUBECONFIG" ;;
+esac
 components=${INFRA_COMPONENTS:?Set INFRA_COMPONENTS to the components to validate}
 ci_dir="$(cd "$(dirname "$0")" && pwd)"
-INFRA_LAB_ROOT="$(dirname "$ci_dir")"
-export INFRA_LAB_ROOT
 kuttl_dir="$ci_dir/kuttl"
 for component in $components; do
     case "$component" in
