@@ -3,7 +3,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-cd "$(dirname "$0")/.."
+trap "make fmt" EXIT
+
 for path in scripts/resources/ci/{tekton,cdi,kubevirt-tekton-tasks}/kustomization.yaml \
     scripts/resources/management/argocd/kustomization.yaml scripts/resources/management/kind.yaml; do
     [[ -f $path ]] || {
@@ -11,4 +12,10 @@ for path in scripts/resources/ci/{tekton,cdi,kubevirt-tekton-tasks}/kustomizatio
         exit 1
     }
 done
-exec uv --quiet run --script ci/update_versions.py
+
+if [ ! command -v uv ] >/dev/null 2>&1; then
+    curl -sSL https://install.astral.sh/uv | sh
+fi
+./ci/update_versions.py
+uvx pre-commit autoupdate
+uv run --no-project --with git+https://github.com/electrocucaracha/gh-updater.git gh-updater .
