@@ -18,7 +18,12 @@ spec:
   containers:
     - name: write-read
       image: alpine:3.21.3
-      command: [sh, -ec, 'echo infra-lab > /data/check; test "$(cat /data/check)" = infra-lab']
+      command:
+        [
+          sh,
+          -ec,
+          'echo infra-lab > /data/check; test "$(cat /data/check)" = infra-lab',
+        ]
       volumeMounts:
         - name: data
           mountPath: /data
