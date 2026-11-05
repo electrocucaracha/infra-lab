@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: task-smoke
+status:
+  conditions:
+    - type: Succeeded
+      status: "True"

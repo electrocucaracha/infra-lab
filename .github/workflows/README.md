@@ -35,7 +35,7 @@ The `plan` job runs on `ubuntu-latest` and performs:
 
 - Shell syntax and ShellCheck validation.
 - Python syntax validation.
-- Mocked component-selection and smoke-manifest checks through
+- Mocked component-selection and KUTTL test-selection checks through
   [ci/check_components.sh](../../ci/check_components.sh).
 - YAML parsing and release-pin validation through
   [ci/check_release_pins.rb](../../ci/check_release_pins.rb).
@@ -51,7 +51,7 @@ provisions a fresh nested AIO VM, runs the installer on the runner host, and
 installs the selected component with its required dependencies. Git-backed
 applications use the PR head commit rather than the default branch.
 [ci/validate_components.sh](../../ci/validate_components.sh) runs the selected
-smoke checks.
+KUTTL smoke tests. The job installs the pinned KUTTL CLI before provisioning.
 
 Matrix jobs have a 90-minute timeout and `fail-fast: false`, so one failed
 component does not cancel the others. Parallel execution requires separate

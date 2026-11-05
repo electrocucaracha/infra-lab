@@ -30,8 +30,10 @@ jobs:
         run: shellcheck -e SC1091 ci/*.sh scripts/configure.sh
       - name: Check Python syntax
         run: python3 -c 'import ast; from pathlib import Path; ast.parse(Path("ci/update_versions.py").read_text())'
-      - name: Check component selection and smoke manifests
+      - name: Check component selection and KUTTL test cases
         run: bash ci/check_components.sh
+      - name: Check KUTTL component selectors
+        run: ruby tests/ci.rb -n test_kuttl_cases_cover_each_component
       - name: Validate YAML and release pins
         run: ruby ci/check_release_pins.rb
       - name: Filter changes
@@ -49,19 +51,20 @@ jobs:
               - '!.vscode/**'
               - '!scripts/resources/in-cluster/{topolvm,kubevirt,cdi,tekton,kubevirt-tekton-tasks,arc}.yaml'
               - '!scripts/resources/ci/{cdi,tekton,kubevirt-tekton-tasks}/**'
-              - '!ci/resources/{topolvm,kubevirt,cdi,tekton}.yaml'
+              - '!ci/resources/topolvm.yaml'
+              - '!ci/kuttl/tests/{topolvm,kubevirt,cdi,tekton,kubevirt-tekton-tasks,arc}/**'
             topolvm:
-              - '{scripts/resources/in-cluster/topolvm.yaml,ci/resources/topolvm.yaml}'
+              - '{scripts/resources/in-cluster/topolvm.yaml,ci/resources/topolvm.yaml,ci/kuttl/tests/topolvm/**}'
             kubevirt:
-              - '{scripts/resources/in-cluster/kubevirt.yaml,ci/resources/kubevirt.yaml}'
+              - '{scripts/resources/in-cluster/kubevirt.yaml,ci/kuttl/tests/kubevirt/**}'
             cdi:
-              - '{scripts/resources/in-cluster/cdi.yaml,scripts/resources/ci/cdi/**,ci/resources/cdi.yaml}'
+              - '{scripts/resources/in-cluster/cdi.yaml,scripts/resources/ci/cdi/**,ci/kuttl/tests/cdi/**}'
             tekton:
-              - '{scripts/resources/in-cluster/tekton.yaml,scripts/resources/ci/tekton/**,ci/resources/tekton.yaml}'
+              - '{scripts/resources/in-cluster/tekton.yaml,scripts/resources/ci/tekton/**,ci/kuttl/tests/tekton/**}'
             kubevirt-tekton-tasks:
-              - '{scripts/resources/in-cluster/kubevirt-tekton-tasks.yaml,scripts/resources/ci/kubevirt-tekton-tasks/**}'
+              - '{scripts/resources/in-cluster/kubevirt-tekton-tasks.yaml,scripts/resources/ci/kubevirt-tekton-tasks/**,ci/kuttl/tests/kubevirt-tekton-tasks/**}'
             arc:
-              - 'scripts/resources/in-cluster/arc.yaml'
+              - '{scripts/resources/in-cluster/arc.yaml,ci/kuttl/tests/arc/**}'
   validate:
     name: Validate ${{ matrix.component }}
     needs: plan
@@ -89,6 +92,14 @@ jobs:
         run: |
           sudo -n mkdir -p /etc/vbox
           printf '%s\n' '* 10.10.16.0/24' | sudo -n tee -a /etc/vbox/networks.conf
+      - name: Install KUTTL CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/kuttl"
+          curl -fsSLo "$RUNNER_TEMP/kuttl/kubectl-kuttl" \
+            https://github.com/kudobuilder/kuttl/releases/download/v0.28.0/kubectl-kuttl_0.28.0_linux_x86_64
+          echo '398aa4d82d17b277a18a7a760e12f8297d78ebdbbfd227de7bfe029dcfca6f1c  '"$RUNNER_TEMP/kuttl/kubectl-kuttl" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/kuttl/kubectl-kuttl"
+          echo "$RUNNER_TEMP/kuttl" >> "$GITHUB_PATH"
       - name: Provision nested AIO VM
         working-directory: ci
         run: ./bootstrap.sh

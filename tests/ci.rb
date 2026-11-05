@@ -60,6 +60,17 @@ class CiInfrastructureTest < Minitest::Test
     assert_equal true, kubevirt.dig('network', 'permitBridgeInterfaceOnPodNetwork')
   end
 
+  def test_kuttl_cases_cover_each_component
+    test_cases = Dir[File.join(ROOT, 'ci/kuttl/tests/*')].to_h do |directory|
+      component = File.basename(directory)
+      test_case = YAML.load_file(File.join(directory, '00-test-case.yaml'))
+      assert_equal component, test_case.dig('testRunSelector', 'matchLabels', 'component')
+      assert File.file?(File.join(directory, '00-assert.yaml'))
+      [component, test_case]
+    end
+    assert_equal APPS.sort, test_cases.keys.sort
+  end
+
   def test_bootstrap_orders_dependencies_without_running_provisioning
     script = <<~BASH
       export __name__=ci_check DEBUG=false

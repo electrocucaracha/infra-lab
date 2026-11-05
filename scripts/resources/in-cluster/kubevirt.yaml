@@ -8,7 +8,7 @@ spec:
   source:
     chart: kubevirt
     repoURL: https://encircle360-oss.github.io/helm-charts/
-    targetRevision: 0.1.2
+    targetRevision: 0.2.1
     helm:
       valuesObject:
         namespace:

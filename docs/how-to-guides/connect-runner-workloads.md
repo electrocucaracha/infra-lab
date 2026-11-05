@@ -179,15 +179,16 @@ One failed component does not cancel the other matrix jobs.
 Smoke checks cover TopoLVM volume binding and read/write,
 KubeVirt VMI readiness, CDI blank-volume creation, Tekton TaskRun execution,
 KubeVirt task availability, and ARC controller rollout.
-The Kubernetes smoke manifests are in `ci/resources/<component>.yaml`;
-`ci/validate_components.sh` applies them and waits for the corresponding checks.
-Changes to a smoke manifest select that component's validator.
+The Kubernetes smoke tests are in `ci/kuttl/tests/<component>/`
+(the TopoLVM case applies `ci/resources/topolvm.yaml`);
+`ci/validate_components.sh` runs the matching KUTTL test case against the
+workload cluster. Changes to a test case select that component's validator.
 ARC registration and task-based golden-image builds still require the separate
 workload configuration described above; these checks do not certify them.
 Cleanup removes the AIO VM, management kind cluster, Compose resources, and exported kubeconfig.
 Discard the runner VM after each job, including cancelled jobs, because teardown is best-effort.
 
-Run the fast selection, revision, and smoke-manifest checks locally without provisioning infrastructure:
+Run the fast selection and KUTTL test-selection checks locally without provisioning infrastructure:
 
 ```bash
 bash ci/check_components.sh

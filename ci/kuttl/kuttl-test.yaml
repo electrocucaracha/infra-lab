@@ -1,0 +1,6 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+  - ./tests
+parallel: 1
+startKIND: false

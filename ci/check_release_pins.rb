@@ -4,7 +4,7 @@ require 'uri'
 Dir.chdir(File.expand_path('..', __dir__))
 
 release = /\Av?\d+\.\d+\.\d+\z/
-Dir.glob('{.github/workflows,scripts/resources,ci/resources}/**/*.{yml,yaml}').each do |path|
+Dir.glob('{.github/workflows,scripts/resources,ci/resources,ci/kuttl}/**/*.{yml,yaml}').each do |path|
   YAML.load_stream(File.read(path)).each do |document|
     next unless document.is_a?(Hash) && path.start_with?('scripts/resources/')
 

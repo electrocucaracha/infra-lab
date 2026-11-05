@@ -17,15 +17,7 @@ function source {
 function get_status { return 1; }
 function kubectl {
     printf 'kubectl %s\n' "$*" >>"$log"
-    [[ ${CHECK_SMOKE_MANIFESTS:-false} == true ]] || return 0
-    case "$*" in
-    *' apply -f '*)
-        local manifest=${!#}
-        [[ -f $manifest && ${MOCK_APPLY_FAILURE:-false} == false ]]
-        ;;
-    'get tasks.tekton.dev -n default -o name') printf 'task.tekton.dev/fixture\n' ;;
-    '-n arc-system get deployments -o name') printf 'deployment.apps/fixture\n' ;;
-    esac
+    [[ ${CHECK_KUTTL_TESTS:-false} == false || ${MOCK_KUTTL_FAILURE:-false} == false ]]
 }
 function argocd { printf 'argocd %s\n' "$*" >>"$log"; }
 function sudo { printf 'sudo %s\n' "$*" >>"$log"; }
@@ -76,22 +68,24 @@ for selection in cdi tekton kubevirt-tekton-tasks; do
 done
 
 repo=$PWD
-export CHECK_SMOKE_MANIFESTS=true
+export CHECK_KUTTL_TESTS=true
 export log
 export -f kubectl
 : >"$log"
 pushd "$home" >/dev/null
 INFRA_COMPONENTS='topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc' bash "$repo/ci/validate_components.sh"
 popd >/dev/null
-for component in topolvm kubevirt cdi tekton; do
-    grep -Fq -- "apply -f $repo/ci/resources/$component.yaml" "$log"
+for component in topolvm kubevirt cdi tekton kubevirt-tekton-tasks arc; do
+    grep -Fq -- "kubectl kuttl test --test-run-labels component=$component" "$log"
 done
-grep -q 'delete namespace infra-lab-ci --wait=false' "$log"
-: >"$log"
-if INFRA_COMPONENTS=tekton MOCK_APPLY_FAILURE=true bash ci/validate_components.sh; then
-    printf 'Manifest application failures must fail validation\n' >&2
+if grep -q 'namespace infra-lab-ci' "$log"; then
+    printf 'KUTTL must manage its own test namespace\n' >&2
     exit 1
 fi
-grep -q 'delete namespace infra-lab-ci --wait=false' "$log"
+: >"$log"
+if INFRA_COMPONENTS=tekton MOCK_KUTTL_FAILURE=true bash ci/validate_components.sh; then
+    printf 'KUTTL failures must fail validation\n' >&2
+    exit 1
+fi
 
-printf 'Component selection, PR revision, and smoke manifest checks passed\n'
+printf 'Component selection, PR revision, and KUTTL test selection checks passed\n'
