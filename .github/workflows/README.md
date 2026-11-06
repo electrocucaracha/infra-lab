@@ -78,8 +78,9 @@ Host-installer mode uses host-only networking; the workflow allows
 management CLIs. All referenced installer and resource files must be present in
 the checkout.
 
-VM jobs accept only same-repository PRs authored by an owner, member, or
-collaborator. Fork PRs receive only the GitHub-hosted static checks. Do not use
+VM jobs accept same-repository PRs and wait for required reviewer approval on
+the `ci-validation` environment before accessing the self-hosted runner. Fork
+PRs receive only the GitHub-hosted static checks. Do not use
 `pull_request_target` to execute untrusted PR code on these privileged runners.
 
 See the
@@ -98,3 +99,11 @@ The cleanup step uses `always()` and attempts to remove the AIO VM, management
 kind cluster, Compose resources, and exported workload kubeconfig. Discard the
 runner VM after every job, including cancelled jobs; cleanup cannot guarantee
 completion if the runner stops or the job times out.
+
+## Upgrade Scenario And Production Rollout
+
+Each `validate` matrix entry runs two scenarios: `fresh` installs the PR head,
+and `upgrade` installs the base commit, validates it, checks out the PR head and
+reapplies the configure phase. No deploy workflow exists: the production
+cluster's Argo CD applications track `HEAD` of the default branch, so merging a
+validated PR is the rollout. Require the validation checks before merging.

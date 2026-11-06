@@ -148,7 +148,8 @@ using this repository's project name.
 
 Create the `ci-validation` GitHub environment and configure required reviewers
 to approve code before it executes with host privileges.
-The VM job accepts only same-repository PRs authored by an owner, member, or collaborator;
+The VM job accepts same-repository PRs and waits for required reviewer approval
+on the `ci-validation` environment before accessing the self-hosted runner;
 fork PRs still receive GitHub-hosted static checks.
 Do not switch this workflow to `pull_request_target` to run fork code.
 Only trusted maintainers should push branches to this repository.

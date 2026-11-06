@@ -65,14 +65,15 @@ jobs:
             arc:
               - '{scripts/resources/in-cluster/arc.yaml,ci/kuttl/tests/arc/**}'
   validate:
-    name: Validate ${{ matrix.component }}
+    name: Validate ${{ matrix.component }} (${{ matrix.scenario }})
     needs: plan
     if: >-
-      needs.plan.outputs.components != '[]' && github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+      needs.plan.outputs.components != '[]' && github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
         component: ${{ fromJSON(needs.plan.outputs.components) }}
+        scenario: [fresh, upgrade]
     runs-on: vm-self-hosted
     environment: ci-validation
     timeout-minutes: 90
@@ -81,12 +82,15 @@ jobs:
       VAGRANT_DEFAULT_PROVIDER: virtualbox
       SUDO_VAGRANT_CMD: "true"
       INFRA_COMPONENTS: ${{ matrix.component }}
-      INFRA_REVISION: ${{ github.event.pull_request.head.sha }}
+      INFRA_REVISION: ${{ matrix.scenario == 'upgrade' && github.event.pull_request.base.sha || github.event.pull_request.head.sha }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       DEBUG: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ matrix.scenario == 'upgrade' && github.event.pull_request.base.sha || '' }}
+          fetch-depth: ${{ matrix.scenario == 'upgrade' && 0 || 1 }}
       - name: Allow VirtualBox lab subnet
         run: |
           sudo -n mkdir -p /etc/vbox
@@ -102,9 +106,20 @@ jobs:
       - name: Provision nested AIO VM
         working-directory: ci
         run: ./bootstrap.sh
-      - name: Install selected components from the PR
+      - name: Install selected components
         working-directory: ci
         run: ./provision_installer.sh
+      - name: Validate the previous version
+        if: matrix.scenario == 'upgrade'
+        run: ./ci/validate_components.sh
+      - name: Upgrade to the PR versions
+        if: matrix.scenario == 'upgrade'
+        working-directory: ci
+        env:
+          INFRA_REVISION: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git checkout --detach "$PR_HEAD_SHA"
+          PROVISION_PHASES=configure ./provision_installer.sh
       - name: Run selected validators
         run: ./ci/validate_components.sh
       - name: Report AIO VM status
