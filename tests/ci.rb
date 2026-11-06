@@ -193,7 +193,7 @@ class CiInfrastructureTest < Minitest::Test
         if scenario == 'installed'
           refute_includes errors, 'curl'
         else
-          assert_includes errors, 'curl -fsSL https://install.astral.sh/uv'
+          assert_includes errors, 'curl -fsSL https://astral.sh/uv/install.sh'
         end
       end
     end

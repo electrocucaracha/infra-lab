@@ -14,8 +14,10 @@ for path in scripts/resources/ci/{tekton,cdi,kubevirt-tekton-tasks}/kustomizatio
 done
 
 if ! command -v uv >/dev/null; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export UV_INSTALL_DIR="$HOME/.local/bin"
+    curl -fsSL https://astral.sh/uv/install.sh | sh
+    export PATH="$UV_INSTALL_DIR:$PATH"
 fi
-./ci/update_versions.py
+uv --quiet run --script ./ci/update_versions.py
 uvx pre-commit autoupdate
 uv run --no-project --with git+https://github.com/electrocucaracha/gh-updater.git gh-updater .
