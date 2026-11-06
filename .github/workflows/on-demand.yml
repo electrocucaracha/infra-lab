@@ -21,7 +21,7 @@ jobs:
       components: >-
         ${{ steps.filter.outputs.shared == 'true' && '["topolvm","kubevirt","cdi","tekton","kubevirt-tekton-tasks","arc"]' || steps.filter.outputs.changes }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Check shell syntax
@@ -84,7 +84,7 @@ jobs:
       INFRA_REVISION: ${{ github.event.pull_request.head.sha }}
       DEBUG: "false"
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Allow VirtualBox lab subnet
