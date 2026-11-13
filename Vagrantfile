@@ -350,7 +350,8 @@ Vagrant.configure('2') do |config|
         chown vagrant:vagrant /home/vagrant/.bash_aliases
 
         cd /vagrant/scripts
-        ./main.sh | tee ~/vagrant_init.log
+        set -o pipefail
+        bash ./main.sh | tee ~/vagrant_init.log
       SHELL
     end
   end

@@ -135,6 +135,97 @@ class CiInfrastructureTest < Minitest::Test
     refute_includes output, 'argocd app set'
   end
 
+  def test_bootstrap_supports_host_and_ci_topologies_from_any_directory
+    %w[false true].product(%w[false true], %w[false true]).each do |host_installer, multinode, sudo_vagrant|
+      Dir.mktmpdir do |directory|
+        FileUtils.mkdir_p([File.join(directory, 'ci'), File.join(directory, 'config'), File.join(directory, 'scripts')])
+        %w[bootstrap.sh _common.sh].each { |name| FileUtils.cp(File.join(ROOT, 'ci', name), File.join(directory, 'ci')) }
+        FileUtils.cp(File.join(ROOT, 'scripts/_utils.sh'), File.join(directory, 'scripts'))
+        script = <<~BASH
+          function vagrant { printf 'vagrant %s\n' "$*"; }
+          function sudo {
+            printf 'sudo %s\n' "$*"
+            shift 3
+            "$@"
+          }
+          export -f vagrant sudo
+          bash "$TEST_ROOT/ci/bootstrap.sh"
+        BASH
+        output, errors, result = Open3.capture3(
+          { 'TEST_ROOT' => directory, 'HOST_INSTALLER' => host_installer, 'TEST_MULTINODE' => multinode,
+            'SUDO_VAGRANT_CMD' => sudo_vagrant, 'DEBUG' => 'false' },
+          'bash', '-c', script, chdir: Dir.tmpdir
+        )
+        assert result.success?, errors
+        names = multinode == 'true' ? %w[controller worker01 worker02] : ['aio']
+        nodes = YAML.load_file(File.join(directory, 'config/pdf.yml'))
+        assert_equal names, nodes.map { |node| node.fetch('name') }
+        names.each do |name|
+          assert_includes output, "vagrant halt #{name}"
+          assert_includes output, "vagrant destroy #{name} -f"
+        end
+        expected = 'vagrant up --no-destroy-on-error'
+        expected += " #{names.join(' ')}" if host_installer == 'true'
+        assert_equal expected, output.lines.grep(/^vagrant up/).last.strip
+        if sudo_vagrant == 'true'
+          assert_includes output, 'sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant up'
+        else
+          refute_includes output, 'sudo '
+        end
+      end
+    end
+  end
+
+  def test_bootstrap_installer_routes_phases_and_propagates_failures
+    %w[host stopped running failure configure].each do |scenario|
+      Dir.mktmpdir do |directory|
+        FileUtils.mkdir_p([File.join(directory, 'ci'), File.join(directory, 'scripts')])
+        FileUtils.cp_r(File.join(ROOT, 'ci/.'), File.join(directory, 'ci'))
+        %w[main.sh _utils.sh].each { |name| FileUtils.cp(File.join(ROOT, 'scripts', name), File.join(directory, 'scripts')) }
+        %w[install configure].each do |phase|
+          File.write(File.join(directory, 'scripts', "#{phase}.sh"), <<~BASH)
+            printf 'phase #{phase} %s %s\n' "$INFRA_COMPONENTS" "$INFRA_REVISION"
+            [[ "$SCENARIO" != failure ]] || exit 23
+          BASH
+        end
+        script = <<~BASH
+          function git { printf '%s\n' "$TEST_ROOT"; }
+          function vagrant {
+            if [[ "$1" == status ]]; then
+              printf 'installer %s (virtualbox)\n' "$SCENARIO"
+            else
+              printf 'vagrant %s\n' "$*"
+            fi
+          }
+          export -f git vagrant
+          bash "$TEST_ROOT/ci/provision_installer.sh"
+        BASH
+        host_installer = %w[host failure configure].include?(scenario)
+        output, errors, result = Open3.capture3(
+          { 'TEST_ROOT' => directory, 'SCENARIO' => scenario, 'HOST_INSTALLER' => host_installer.to_s,
+            'SUDO_VAGRANT_CMD' => 'false', 'PROVISION_PHASES' => scenario == 'configure' ? 'configure' : 'install configure',
+            'INFRA_COMPONENTS' => 'arc', 'INFRA_REVISION' => 'revision-under-test', 'DEBUG' => 'false' },
+          'bash', '-c', script, chdir: Dir.tmpdir
+        )
+        if scenario == 'failure'
+          assert_equal 23, result.exitstatus, errors
+          refute_includes output, 'phase configure'
+        else
+          assert result.success?, errors
+          case scenario
+          when 'stopped'
+            assert_includes output, 'vagrant up --no-destroy-on-error installer'
+          when 'running'
+            assert_includes output, 'vagrant ssh installer -- cd /vagrant/scripts; bash ./main.sh'
+          else
+            expected = scenario == 'configure' ? ['configure'] : %w[install configure]
+            assert_equal expected.map { |phase| "phase #{phase} arc revision-under-test" }, output.lines.grep(/^phase /).map(&:strip)
+          end
+        end
+      end
+    end
+  end
+
   def test_version_updater_bootstraps_uv_and_propagates_installation_failures
     %w[installed missing download-failure install-failure].each do |scenario|
       Dir.mktmpdir do |directory|

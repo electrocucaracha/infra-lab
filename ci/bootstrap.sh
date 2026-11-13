@@ -12,8 +12,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 # shellcheck source=ci/_common.sh
-source _common.sh
+source ./_common.sh
 
 function destroy_vm {
     local vm="$1"

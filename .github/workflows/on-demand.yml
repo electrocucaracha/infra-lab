@@ -25,15 +25,15 @@ jobs:
         with:
           persist-credentials: false
       - name: Check shell syntax
-        run: for script in ci/*.sh scripts/configure.sh; do bash -n "$script"; done
+        run: for script in ci/*.sh scripts/*.sh; do bash -n "$script"; done
       - name: Lint shell scripts
-        run: shellcheck -e SC1091 ci/*.sh scripts/configure.sh
+        run: shellcheck -e SC1091 ci/*.sh scripts/*.sh
       - name: Check Python syntax
         run: python3 -c 'import ast; from pathlib import Path; ast.parse(Path("ci/update_versions.py").read_text())'
       - name: Check component selection and KUTTL test cases
         run: bash ci/check_components.sh
-      - name: Check KUTTL and version-updater contracts
-        run: ruby tests/ci.rb -n '/test_(kuttl_|version_updater_)/'
+      - name: Check bootstrap, KUTTL and version-updater contracts
+        run: ruby tests/ci.rb -n '/test_(bootstrap_|kuttl_|version_updater_)/'
       - name: Validate YAML and release pins
         run: ruby ci/check_release_pins.rb
       - name: Filter changes

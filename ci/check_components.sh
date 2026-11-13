@@ -14,6 +14,7 @@ function source {
     *) builtin source "$@" ;;
     esac
 }
+# shellcheck disable=SC2329
 function get_status { return 1; }
 function kubectl {
     printf 'kubectl %s\n' "$*" >>"$log"

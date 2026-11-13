@@ -62,7 +62,7 @@ The installer does not autostart with an untargeted `vagrant up`.
 
 The Vagrantfile separately defaults its guest `DEBUG` setting to `true`
 when the host does not supply `DEBUG`.
-`scripts/main.sh` enables its own shell tracing unconditionally.
+`scripts/main.sh` enables shell tracing only when `DEBUG=true`.
 These tracing settings are not a single global logging switch.
 `KRD_ARC_TOKEN` is not an input to platform bootstrap.
 

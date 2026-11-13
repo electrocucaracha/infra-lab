@@ -13,7 +13,7 @@ set -o nounset
 set -o pipefail
 
 # shellcheck source=scripts/_utils.sh
-source ../scripts/_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../scripts/_utils.sh"
 
 # run_installer_cmd() - Runs a specific command on the installer node
 function run_installer_cmd {

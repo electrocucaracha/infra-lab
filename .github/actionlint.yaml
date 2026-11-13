@@ -1,3 +1,4 @@
 self-hosted-runner:
   labels:
     - infra-lab
+    - vm-self-hosted
