@@ -91,6 +91,13 @@ jobs:
           persist-credentials: false
           ref: ${{ matrix.scenario == 'upgrade' && github.event.pull_request.base.sha || '' }}
           fetch-depth: ${{ matrix.scenario == 'upgrade' && 0 || 1 }}
+      - name: Prepare upgrade harness compatibility
+        if: matrix.scenario == 'upgrade'
+        run: |
+          if [[ ! -f scripts/_utils.sh ]]; then
+            git show "${PR_HEAD_SHA}:scripts/_utils.sh" > scripts/_utils.sh
+          fi
+          mkdir -p scripts/resources/overcloud
       - name: Allow VirtualBox lab subnet
         run: |
           sudo -n mkdir -p /etc/vbox
@@ -144,6 +151,8 @@ jobs:
       - name: Report cluster diagnostics
         if: failure()
         run: |
+          kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get jobs,pods -o wide || true
+          kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get events --sort-by=.lastTimestamp || true
           kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide || true
           kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp || true
           kubectl --context kind-in-cluster -n argocd get applications || true

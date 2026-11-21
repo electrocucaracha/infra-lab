@@ -26,6 +26,23 @@ class CiInfrastructureTest < Minitest::Test
     assert_equal 'scripts/resources/in-cluster', parent.dig('spec', 'source', 'path')
   end
 
+  def test_upgrade_validation_keeps_base_revision_and_prepares_its_harness
+    steps = YAML.load_file(File.join(ROOT, '.github/workflows/on-demand.yml')).dig('jobs', 'validate', 'steps')
+    checkout = steps.find { |step| step['uses']&.start_with?('actions/checkout@') }
+    assert_includes checkout.dig('with', 'ref'), 'pull_request.base.sha'
+
+    prepare = steps.find { |step| step['name'] == 'Prepare upgrade harness compatibility' }
+    assert_equal "matrix.scenario == 'upgrade'", prepare['if']
+    assert_includes prepare['run'], 'git show "${PR_HEAD_SHA}:scripts/_utils.sh" > scripts/_utils.sh'
+    assert_includes prepare['run'], 'mkdir -p scripts/resources/overcloud'
+    bootstrap = steps.index { |step| step['name'] == 'Provision nested AIO VM' }
+    assert_operator steps.index(prepare), :<, bootstrap
+
+    diagnostics = steps.find { |step| step['name'] == 'Report cluster diagnostics' }
+    assert_includes diagnostics['run'], '-n kubean-system get jobs,pods -o wide'
+    assert_includes diagnostics['run'], '-n kubean-system get events'
+  end
+
   def test_inventory_contains_each_nodes_roles
     Dir.mktmpdir do |directory|
       FileUtils.mkdir_p(File.join(directory, 'scripts/resources/overcloud'))
