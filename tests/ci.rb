@@ -43,6 +43,39 @@ class CiInfrastructureTest < Minitest::Test
     assert_includes diagnostics['run'], '-n kubean-system get events'
   end
 
+  def test_bootstrap_diagnostics_handle_missing_and_available_workload_clusters
+    steps = manifest('.github/workflows/on-demand.yml').dig('jobs', 'validate', 'steps')
+    diagnostics = steps.find { |step| step['name'] == 'Report cluster diagnostics' }
+    script = <<~BASH
+      function kubectl {
+        printf 'kubectl %s\\n' "$*" >&2
+        case "$*" in
+          *'get service argocd-server'*) printf '10.0.0.1' ;;
+          *'topolvm-system get pods'*) printf 'healthy \\ncrashing lvmd registrar\\n' ;;
+          *) return 1 ;;
+        esac
+      }
+      function curl { printf 'curl %s\\n' "$*" >&2; return 28; }
+      #{diagnostics.fetch('run')}
+    BASH
+    Dir.mktmpdir do |directory|
+      kubeconfig = File.join(directory, 'kubeconfig')
+      env = { 'WORKLOAD_KUBECONFIG' => kubeconfig }
+      output, calls, result = Open3.capture3(env, 'bash', '-e', '-c', script)
+      assert result.success?, calls
+      assert_includes output, 'Workload diagnostics skipped'
+      assert_includes calls, 'https://10.0.0.1/healthz'
+      assert_includes calls, '-n kubean-system get events'
+      refute_includes calls, '--kubeconfig'
+
+      File.write(kubeconfig, 'placeholder')
+      _, calls, result = Open3.capture3(env, 'bash', '-e', '-c', script)
+      assert result.success?, calls
+      assert_equal %w[lvmd registrar], calls.scan(/logs crashing -c (\S+) --previous/).flatten
+      refute_includes calls, 'logs healthy'
+    end
+  end
+
   def test_inventory_contains_each_nodes_roles
     Dir.mktmpdir do |directory|
       FileUtils.mkdir_p(File.join(directory, 'scripts/resources/overcloud'))
@@ -150,6 +183,44 @@ class CiInfrastructureTest < Minitest::Test
     assert_operator output.index('cdi/cdi'), :<, output.index('argocd app sync tekton')
     assert_operator output.index('tektonconfig/config'), :<, output.index('argocd app sync kubevirt-tekton-tasks')
     refute_includes output, 'argocd app set'
+  end
+
+  def test_bootstrap_retries_argocd_login_and_propagates_persistent_failure
+    %w[retry failure].each do |scenario|
+      script = <<~BASH
+        export __name__=ci_check DEBUG=false
+        source ./configure.sh
+        attempts=0
+        function kubectl { [[ "$1" != get ]] || printf '10.0.0.1\\n'; }
+        function argocd {
+          case "$1" in
+            admin) printf 'password\\n' ;;
+            login)
+              ((attempts += 1))
+              printf 'login attempt %s\\n' "$attempts"
+              if [[ "#{scenario}" == retry ]]; then
+                [[ $attempts == 3 ]]
+              else
+                return 1
+              fi
+              ;;
+            *) printf 'argocd %s\\n' "$*" ;;
+          esac
+        }
+        function sleep { printf 'sleep %s\\n' "$*"; }
+        _deploy_in_cluster_apps
+      BASH
+      output, errors, result = Open3.capture3('bash', '-c', script, chdir: File.join(ROOT, 'scripts'))
+      assert_equal 3, output.scan(/^login attempt/).length, scenario
+      assert_equal 2, output.scan(/^sleep 10$/).length, scenario
+      if scenario == 'retry'
+        assert result.success?, errors
+        assert_includes output, 'argocd app sync kubean'
+      else
+        refute result.success?, scenario
+        refute_includes output, 'argocd app sync kubean'
+      end
+    end
   end
 
   def test_bootstrap_supports_host_and_ci_topologies_from_any_directory

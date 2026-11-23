@@ -49,7 +49,21 @@ function _deploy_in_cluster_apps {
 
     kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' -n argocd service/argocd-server
     set +o xtrace
-    argocd login "$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')" --insecure --username admin --password "$(argocd admin initial-password -n argocd | head -n 1)"
+    local argocd_server
+    local argocd_password
+    local attempt
+    argocd_server=$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    argocd_password=$(argocd admin initial-password -n argocd | head -n 1)
+    for attempt in 1 2 3; do
+        if argocd login "$argocd_server" --insecure --username admin --password "$argocd_password"; then
+            break
+        fi
+        if [[ $attempt == 3 ]]; then
+            return 1
+        fi
+        echo "Argo CD login failed; retrying in 10 seconds (attempt $attempt/3)" >&2
+        sleep 10
+    done
     [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
 
     argocd app sync kubean
