@@ -42,6 +42,10 @@ class CiInfrastructureTest < Minitest::Test
     assert_includes diagnostics['run'], '-n kubean-system get jobs,pods -o wide'
     assert_includes diagnostics['run'], '-n kubean-system get events'
     assert_includes diagnostics['run'], 'argocd-application-controller'
+
+    cleanup = steps.find { |step| step['name'] == 'Clean up lab resources' }
+    assert_includes cleanup['run'], 'command -v kind'
+    assert_includes cleanup['run'], 'sudo -n "$kind_bin" delete cluster --name in-cluster'
   end
 
   def test_inventory_contains_each_nodes_roles

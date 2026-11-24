@@ -49,14 +49,27 @@ function _deploy_in_cluster_apps {
     kubectl apply -f resources/in-cluster/kubean.yaml
 
     kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' -n argocd service/argocd-server
-    set +o xtrace
-    argocd login "$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')" --insecure --username admin --password "$(argocd admin initial-password -n argocd | head -n 1)"
-    [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
+    local argocd_ip
+    argocd_ip=$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    local attempt
+    for attempt in 1 2 3; do
+        set +o xtrace
+        if argocd login "$argocd_ip" --insecure --username admin --password "$(argocd admin initial-password -n argocd | head -n 1)"; then
+            [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
+            info "Logged in to Argo CD at $argocd_ip (attempt $attempt/3)"
+            break
+        fi
+        [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
+        [[ $attempt -lt 3 ]] || error "Argo CD login failed after $attempt attempts"
+        warn "Argo CD login failed; retrying in 10 seconds (attempt $attempt/3)"
+        sleep 10
+    done
 
     info "Waiting for Kubean application sync and health"
     argocd app wait kubean --sync --health --timeout 600
     info "Kubean application is synced and healthy"
     kubectl wait --for=condition=Established crd/clusters.kubean.io crd/clusteroperations.kubean.io --timeout=120s
+    info "Kubean CRDs are established"
 }
 
 function _create_infra {

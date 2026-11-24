@@ -151,21 +151,50 @@ jobs:
       - name: Report cluster diagnostics
         if: failure()
         run: |
+          if ! command -v kubectl >/dev/null 2>&1; then
+              echo "::warning::kubectl is not on PATH; skipping cluster diagnostics"
+              exit 0
+          fi
+          echo "::group::kube-system jobs and pods (in-cluster)"
           kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get jobs,pods -o wide || true
           kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get events --sort-by=.lastTimestamp || true
+          echo "::endgroup::"
+          echo "::group::Argo CD applications"
           kubectl --context kind-in-cluster --request-timeout=15s -n argocd get applications \
             -o 'custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,OPERATION:.status.operationState.phase,MESSAGE:.status.operationState.message' || true
+          kubectl --context kind-in-cluster --request-timeout=15s -n argocd get applications || true
+          echo "::endgroup::"
+          echo "::group::Argo CD application controller logs"
           kubectl --context kind-in-cluster --request-timeout=15s -n argocd logs statefulset/argocd-application-controller \
             --tail=100 --timestamps || true
-          kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide || true
-          kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp || true
-          kubectl --context kind-in-cluster -n argocd get applications || true
+          echo "::endgroup::"
+          if [[ -f /tmp/kubeconfig.yml ]]; then
+              echo "::group::Overcloud pods and events"
+              kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide || true
+              kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp || true
+              echo "::endgroup::"
+          else
+              echo "::notice::/tmp/kubeconfig.yml not generated; overcloud was not reached"
+          fi
       - name: Clean up lab resources
         if: always()
         run: |
           result=0
+          # sudo's secure_path drops PATH entries such as /usr/local/bin, so resolve binaries first.
+          kind_bin=$(command -v kind || true)
+          docker_bin=$(command -v docker || true)
+          echo "::notice::Cleaning up lab resources (kind=${kind_bin:-missing}, docker=${docker_bin:-missing})"
           sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant destroy -f aio || result=1
-          sudo -n kind delete cluster --name in-cluster || result=1
-          sudo -n docker compose -f scripts/compose.yaml down --volumes || result=1
+          if [[ -n $kind_bin ]]; then
+              sudo -n "$kind_bin" delete cluster --name in-cluster || result=1
+          else
+              echo "::warning::kind not found; skipping in-cluster deletion"
+          fi
+          if [[ -n $docker_bin ]]; then
+              sudo -n "$docker_bin" compose -f scripts/compose.yaml down --volumes || result=1
+          else
+              echo "::warning::docker not found; skipping compose teardown"
+          fi
           rm -f /tmp/kubeconfig.yml
+          echo "::notice::Cleanup finished with status $result"
           exit "$result"
