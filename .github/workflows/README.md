@@ -91,16 +91,10 @@ for the base-image definition and storage considerations.
 
 Before cleanup, failed jobs report AIO VM status, VirtualBox information and
 logs, guest kubelet/containerd journals, kernel messages, and the node
-provisioning log. Runner and guest snapshots include memory, disk, and CPU,
-memory, and I/O pressure. The guest snapshot also shows LVM volume groups and
-has a 90-second SSH limit.
-
-Open **Report cluster diagnostics** in the failed Actions job for Argo CD
-application status, server logs, and a LoadBalancer HTTPS health probe. The
-step also shows Kubean and workload events and the previous logs of restarting
-TopoLVM containers. If the installer never exported a workload kubeconfig, the
-step logs that fact and skips the workload commands. The health probe is a
-point-in-time HTTPS check; a successful probe does not prove gRPC login worked.
+provisioning log. Guest SSH diagnostics have a 90-second limit. Cluster
+diagnostics include pod state, events, Argo CD application sync/health state,
+and application-controller logs. These best-effort commands write to the
+Actions logs.
 
 The cleanup step uses `always()` and attempts to remove the AIO VM, management
 kind cluster, Compose resources, and exported workload kubeconfig. Discard the

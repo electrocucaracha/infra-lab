@@ -16,6 +16,8 @@ function source {
 }
 # shellcheck disable=SC2329
 function get_status { return 1; }
+# shellcheck disable=SC2329
+function info { printf 'INFO: %s\n' "$*" >>"$log"; }
 function kubectl {
     printf 'kubectl %s\n' "$*" >>"$log"
     if [[ ${CHECK_KUTTL_TESTS:-false} == true && -n ${EXPECTED_KUBECONFIG:-} && $KUBECONFIG != "$EXPECTED_KUBECONFIG" ]]; then
@@ -41,7 +43,7 @@ for selection in tekton kubevirt cdi kubevirt-tekton-tasks arc default; do
     unset INFRA_COMPONENTS INFRA_REVISION
     [[ $selection == default ]] || export INFRA_COMPONENTS=$selection
     _deploy_infra_apps
-    actual=$(awk '$1 == "argocd" && $3 == "sync" {print $4}' "$log" | paste -sd ' ' -)
+    actual=$(awk '$1 == "argocd" && $3 == "wait" && $5 == "--sync" {print $4}' "$log" | paste -sd ' ' -)
     case "$selection" in
     cdi) expected="topolvm kubevirt cdi" ;;
     kubevirt-tekton-tasks) expected="topolvm kubevirt cdi tekton kubevirt-tekton-tasks" ;;

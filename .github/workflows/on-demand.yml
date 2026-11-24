@@ -129,16 +129,6 @@ jobs:
           PROVISION_PHASES=configure ./provision_installer.sh
       - name: Run selected validators
         run: ./ci/validate_components.sh
-      - name: Report runner resources
-        if: failure()
-        run: |
-          git log -1 --format='Checkout: %H %s' || true
-          uptime
-          printf 'Logical CPUs: '
-          nproc
-          free -m
-          df -h / "$GITHUB_WORKSPACE" "$RUNNER_TEMP"
-          grep -H . /proc/pressure/{cpu,memory,io} || true
       - name: Report AIO VM status
         if: failure()
         run: sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant status aio || true
@@ -154,62 +144,22 @@ jobs:
         if: failure()
         run: |
           timeout 90s sudo -n -H --preserve-env=VAGRANT_DEFAULT_PROVIDER,HOST_INSTALLER vagrant ssh aio --command '
-            uptime
-            free -m
-            df -h / /var/lib/containerd /var/lib/docker
-            grep -H . /proc/pressure/{cpu,memory,io} || true
-            lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
-            sudo vgs -o vg_name,vg_size,vg_free,pv_count || true
             sudo journalctl -b -u kubelet -u containerd -n 250 --no-pager || true
             sudo journalctl -b -k -n 100 --no-pager || true
             sudo tail -n 200 /home/vagrant/node.log || true
           ' || true
       - name: Report cluster diagnostics
         if: failure()
-        env:
-          WORKLOAD_KUBECONFIG: /tmp/kubeconfig.yml
         run: |
-          management() { kubectl --context kind-in-cluster --request-timeout=15s "$@"; }
-          workload() { kubectl --kubeconfig "$WORKLOAD_KUBECONFIG" --request-timeout=15s "$@"; }
-
-          echo '::group::Argo CD status and connectivity'
-          management -n argocd get pods,svc,endpointslices -o wide || true
-          management -n argocd get applications \
-            -o 'custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,OPERATION:.status.operationState.phase,MESSAGE:.status.operationState.message,CONDITIONS:.status.conditions[*].message' || true
-          management -n argocd logs deployment/argocd-server --tail=80 --timestamps || true
-          if address=$(management -n argocd get service argocd-server -o 'jsonpath={.status.loadBalancer.ingress[0].ip}') && [[ -n $address ]]; then
-            curl --fail --silent --show-error --insecure --max-time 10 --output /dev/null \
-              --write-out 'Argo CD /healthz: HTTP %{http_code}, connect %{time_connect}s, TLS %{time_appconnect}s\n' \
-              "https://$address/healthz" || true
-          fi
-          echo '::endgroup::'
-
-          echo '::group::Kubean status'
-          management -n kubean-system get jobs,pods -o wide || true
-          management -n kubean-system get events --sort-by=.lastTimestamp || true
-          echo '::endgroup::'
-
-          if [[ ! -s $WORKLOAD_KUBECONFIG ]]; then
-            echo 'Workload diagnostics skipped: the installer did not export a kubeconfig.'
-            exit 0
-          fi
-          echo '::group::Workload cluster status'
-          workload get nodes -o wide || true
-          workload get pods -A -o wide || true
-          workload get events -A --sort-by=.lastTimestamp || true
-          echo '::endgroup::'
-
-          echo '::group::Restarting TopoLVM containers'
-          if restarting=$(workload -n topolvm-system get pods --ignore-not-found \
-            -o 'jsonpath={range .items[*]}{.metadata.name}{" "}{range .status.containerStatuses[?(@.restartCount>0)]}{.name}{" "}{end}{"\n"}{end}'); then
-            while read -r pod containers; do
-              for container in $containers; do
-                workload -n topolvm-system logs "$pod" -c "$container" \
-                  --previous --tail=80 --timestamps --prefix || true
-              done
-            done <<< "$restarting"
-          fi
-          echo '::endgroup::'
+          kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get jobs,pods -o wide || true
+          kubectl --context kind-in-cluster --request-timeout=15s -n kubean-system get events --sort-by=.lastTimestamp || true
+          kubectl --context kind-in-cluster --request-timeout=15s -n argocd get applications \
+            -o 'custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,OPERATION:.status.operationState.phase,MESSAGE:.status.operationState.message' || true
+          kubectl --context kind-in-cluster --request-timeout=15s -n argocd logs statefulset/argocd-application-controller \
+            --tail=100 --timestamps || true
+          kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide || true
+          kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp || true
+          kubectl --context kind-in-cluster -n argocd get applications || true
       - name: Clean up lab resources
         if: always()
         run: |

@@ -45,29 +45,17 @@ function _create_in_cluster {
 }
 
 function _deploy_in_cluster_apps {
+    info "Applying Kubean application; Argo CD automated sync is enabled"
     kubectl apply -f resources/in-cluster/kubean.yaml
 
     kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' -n argocd service/argocd-server
     set +o xtrace
-    local argocd_server
-    local argocd_password
-    local attempt
-    argocd_server=$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
-    argocd_password=$(argocd admin initial-password -n argocd | head -n 1)
-    for attempt in 1 2 3; do
-        if argocd login "$argocd_server" --insecure --username admin --password "$argocd_password"; then
-            break
-        fi
-        if [[ $attempt == 3 ]]; then
-            return 1
-        fi
-        echo "Argo CD login failed; retrying in 10 seconds (attempt $attempt/3)" >&2
-        sleep 10
-    done
+    argocd login "$(kubectl get svc argocd-server -n argocd -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')" --insecure --username admin --password "$(argocd admin initial-password -n argocd | head -n 1)"
     [[ ${DEBUG:-false} != "true" ]] || set -o xtrace
 
-    argocd app sync kubean
+    info "Waiting for Kubean application sync and health"
     argocd app wait kubean --sync --health --timeout 600
+    info "Kubean application is synced and healthy"
     kubectl wait --for=condition=Established crd/clusters.kubean.io crd/clusteroperations.kubean.io --timeout=120s
 }
 
@@ -106,6 +94,7 @@ function _deploy_infra_apps {
     done
 
     for app in "${components[@]}"; do
+        info "Applying $app application; Argo CD automated sync is enabled"
         case "$app" in
         cdi | tekton | kubevirt-tekton-tasks)
             if [[ -n ${INFRA_REVISION:-} ]]; then
@@ -118,8 +107,9 @@ function _deploy_infra_apps {
             ;;
         *) kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml" ;;
         esac
-        argocd app sync "$app"
+        info "Waiting for $app application sync and health"
         argocd app wait "$app" --sync --health --timeout 600
+        info "$app application is synced and healthy"
         case "$app" in
         kubevirt)
             kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available kubevirt/kubevirt -n kubevirt-system --timeout=10m
