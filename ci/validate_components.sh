@@ -23,8 +23,17 @@ done
 
 for component in $components; do
     printf 'Validating %s with KUTTL\n' "$component"
-    (
+    if ! (
         cd "$kuttl_dir"
         kubectl kuttl test --test-run-labels "component=$component"
-    )
+    ); then
+        printf '::group::Cluster state after %s KUTTL failure\n' "$component" >&2
+        kubectl get events -A --sort-by=.lastTimestamp | tail -n 60 || true
+        kubectl get pods -A -o wide || true
+        kubectl get pvc -A || true
+        kubectl get vmi -A -o wide || true
+        kubectl get namespaces || true
+        printf '::endgroup::\n' >&2
+        exit 1
+    fi
 done

@@ -124,8 +124,14 @@ jobs:
         working-directory: ci
         env:
           INFRA_REVISION: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          if ! git cat-file -e "${PR_HEAD_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$PR_HEAD_SHA" ||
+              git fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
+          fi
           git checkout --detach "$PR_HEAD_SHA"
+          echo "Upgrading to PR head revision $(git rev-parse HEAD)"
           PROVISION_PHASES=configure ./provision_installer.sh
       - name: Run selected validators
         run: ./ci/validate_components.sh

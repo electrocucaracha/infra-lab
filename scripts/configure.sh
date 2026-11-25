@@ -44,6 +44,30 @@ function _create_in_cluster {
     kubectl wait --for=condition=Ready --all pods -n argocd --timeout 10m
 }
 
+function _dump_argo_app_diagnostics {
+    local app=$1
+    warn "Argo CD application $app did not become synced and healthy; collecting diagnostics"
+    argocd app get "$app" || true
+    kubectl --context "kind-$KIND_CLUSTER_NAME" get application "$app" -n argocd \
+        -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
+    kubectl --context "kind-$KIND_CLUSTER_NAME" get events -n argocd --sort-by=.lastTimestamp | tail -n 30 || true
+}
+
+function _dump_infra_diagnostics {
+    warn "Collecting infrastructure diagnostics: $1"
+    kubectl --kubeconfig /tmp/kubeconfig.yml get pods -A -o wide \
+        --field-selector=status.phase!=Running,status.phase!=Succeeded || true
+    kubectl --kubeconfig /tmp/kubeconfig.yml get events -A --sort-by=.lastTimestamp | tail -n 40 || true
+}
+
+function _wait_argo_app {
+    local app=$1
+    if ! argocd app wait "$app" --sync --health --timeout 600; then
+        _dump_argo_app_diagnostics "$app"
+        error "Argo CD application $app is not synced and healthy"
+    fi
+}
+
 function _deploy_in_cluster_apps {
     info "Applying Kubean application; Argo CD automated sync is enabled"
     kubectl apply -f resources/in-cluster/kubean.yaml
@@ -66,7 +90,7 @@ function _deploy_in_cluster_apps {
     done
 
     info "Waiting for Kubean application sync and health"
-    argocd app wait kubean --sync --health --timeout 600
+    _wait_argo_app kubean
     info "Kubean application is synced and healthy"
     kubectl wait --for=condition=Established crd/clusters.kubean.io crd/clusteroperations.kubean.io --timeout=120s
     info "Kubean CRDs are established"
@@ -121,17 +145,29 @@ function _deploy_infra_apps {
         *) kubectl --context "kind-$KIND_CLUSTER_NAME" apply -f "resources/in-cluster/$app.yaml" ;;
         esac
         info "Waiting for $app application sync and health"
-        argocd app wait "$app" --sync --health --timeout 600
+        _wait_argo_app "$app"
         info "$app application is synced and healthy"
         case "$app" in
         kubevirt)
-            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available kubevirt/kubevirt -n kubevirt-system --timeout=10m
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available kubevirt/kubevirt -n kubevirt-system --timeout=10m ||
+                {
+                    _dump_infra_diagnostics "kubevirt"
+                    error "KubeVirt is not available"
+                }
             ;;
         cdi)
-            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available cdi/cdi --timeout=10m
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Available cdi/cdi --timeout=10m ||
+                {
+                    _dump_infra_diagnostics "cdi"
+                    error "CDI is not available"
+                }
             ;;
         tekton)
-            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Ready tektonconfig/config --timeout=10m
+            kubectl --kubeconfig /tmp/kubeconfig.yml wait --for=condition=Ready tektonconfig/config --timeout=10m ||
+                {
+                    _dump_infra_diagnostics "tekton"
+                    error "TektonConfig is not ready"
+                }
             ;;
         esac
     done

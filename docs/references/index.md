@@ -14,6 +14,7 @@ They are not installation procedures.
 | ------------------------------------ | ------------------------------------------------------------------------- |
 | [Configuration](configuration.md)    | Topology fields, defaults, Git sources, entry points, and generated files |
 | [Platform components](components.md) | Application names, destinations, version pins, and readiness conditions   |
+| [CI hardware](ci-hardware.md)        | AIO VM sizing, test workload requests and limits, and check timeouts      |
 
 For installation, use the [tutorial](../tutorials/first-ci-platform.md).
 For operational tasks, use the [how-to guides](../how-to-guides/index.md).
