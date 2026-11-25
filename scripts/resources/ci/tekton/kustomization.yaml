@@ -17,3 +17,11 @@ patches:
       spec:
         pruner:
           disabled: false
+        scheduler:
+          config.yaml: {}
+          disabled: true
+          multi-cluster-disabled: true
+          multi-cluster-role: Hub
+        tektonpruner:
+          disabled: true
+          global-config: {}

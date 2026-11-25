@@ -22,8 +22,34 @@ class CiInfrastructureTest < Minitest::Test
       assert_equal 'infra-lab', app.dig('spec', 'destination', 'name')
       assert_equal true, app.dig('spec', 'syncPolicy', 'automated', 'selfHeal')
     end
+    arc = applications.find { |app| app.dig('metadata', 'name') == 'arc' }
+    assert_includes arc.dig('spec', 'syncPolicy', 'syncOptions'), 'ServerSideApply=true'
     parent = manifest('scripts/resources/bootstrap.yaml')
     assert_equal 'scripts/resources/in-cluster', parent.dig('spec', 'source', 'path')
+  end
+
+  def test_tekton_config_supplies_v082_required_fields_without_changing_pruning
+    patch = manifest('scripts/resources/ci/tekton/kustomization.yaml').dig('patches', 0, 'patch')
+    spec = YAML.safe_load(patch).fetch('spec')
+    assert_equal false, spec.dig('pruner', 'disabled')
+    assert_equal true, spec.dig('tektonpruner', 'disabled')
+    assert_equal({}, spec.dig('tektonpruner', 'global-config'))
+    assert_equal({
+      'config.yaml' => {},
+      'disabled' => true,
+      'multi-cluster-disabled' => true,
+      'multi-cluster-role' => 'Hub'
+    }, spec.fetch('scheduler'))
+  end
+
+  def test_kubevirt_smoke_asserts_running_phase_instead_of_exact_conditions_array
+    assertion = YAML.load_stream(File.read(File.join(ROOT, 'ci/kuttl/tests/kubevirt/00-assert.yaml'))).last
+    assert_equal 'Running', assertion.dig('status', 'phase')
+    refute assertion.dig('status').key?('conditions')
+  end
+
+  def test_installer_includes_unzip_for_helm_plugin_installation
+    assert_includes File.read(File.join(ROOT, 'scripts/install.sh')), 'PKG="docker unzip"'
   end
 
   def test_upgrade_validation_keeps_base_revision_and_prepares_its_harness
@@ -46,6 +72,31 @@ class CiInfrastructureTest < Minitest::Test
     cleanup = steps.find { |step| step['name'] == 'Clean up lab resources' }
     assert_includes cleanup['run'], 'command -v kind'
     assert_includes cleanup['run'], 'sudo -n "$kind_bin" delete cluster --name in-cluster'
+  end
+
+  def test_argo_app_diagnostics_include_failed_pod_logs
+    script = <<~BASH
+      export __name__=ci_check DEBUG=false
+      source ./configure.sh
+      function argocd { :; }
+      function kubectl {
+        printf 'kubectl %s\\n' "$*" >&2
+        case "$*" in
+          *"get application topolvm -n argocd -o jsonpath={.spec.destination.namespace}"*)
+            printf 'topolvm-system\\n'
+            ;;
+          *"get pods -n topolvm-system --no-headers"*)
+            printf 'topolvm-lvmd-0 0/1 CrashLoopBackOff 3 2m\\n'
+            ;;
+        esac
+      }
+      _dump_argo_app_diagnostics topolvm
+    BASH
+    output, errors, result = Open3.capture3('bash', '-c', script, chdir: File.join(ROOT, 'scripts'))
+    assert result.success?, errors
+    assert_includes errors, 'describe pod/topolvm-lvmd-0 -n topolvm-system'
+    assert_includes errors, 'logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --tail=100 --timestamps'
+    assert_includes errors, 'logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --previous --tail=100 --timestamps'
   end
 
   def test_inventory_contains_each_nodes_roles

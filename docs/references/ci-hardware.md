@@ -78,7 +78,8 @@ The `arc` smoke test also waits up to 5 minutes per rollout in `ci/kuttl/tests/a
 
 When a check times out, the workflow prints diagnostics:
 
-- Argo CD application status and events, from `scripts/configure.sh`.
+- Argo CD application status, events, and unhealthy/restarted pod details and
+  current/previous container logs, from `scripts/configure.sh`.
 - Non-running pods and recent events in the infrastructure cluster, from `scripts/configure.sh`.
 - Cluster events, pods, PVCs, VMIs, and namespaces after a failing KUTTL component,
   from `ci/validate_components.sh`.

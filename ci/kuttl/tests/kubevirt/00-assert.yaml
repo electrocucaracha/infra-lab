@@ -7,6 +7,4 @@ kind: VirtualMachineInstance
 metadata:
   name: vm-smoke
 status:
-  conditions:
-    - type: Ready
-      status: "True"
+  phase: Running

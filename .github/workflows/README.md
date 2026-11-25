@@ -93,8 +93,10 @@ Before cleanup, failed jobs report AIO VM status, VirtualBox information and
 logs, guest kubelet/containerd journals, kernel messages, and the node
 provisioning log. Guest SSH diagnostics have a 90-second limit. Cluster
 diagnostics include pod state, events, Argo CD application sync/health state,
-and application-controller logs. These best-effort commands write to the
-Actions logs.
+and application-controller logs. When an Argo CD application fails to become
+healthy, its destination namespace's resources, events, and logs for unhealthy
+or restarted pods (including previous container logs) are also collected.
+These best-effort commands write to the Actions logs.
 
 The cleanup step uses `always()` and attempts to remove the AIO VM, management
 kind cluster, Compose resources, and exported workload kubeconfig. Discard the
