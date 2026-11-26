@@ -48,6 +48,8 @@ function _dump_argo_app_diagnostics {
     local app=$1
     local namespace
     local failed_pods
+    local destination_name
+    local -a workload_kubectl=(kubectl --context "kind-$KIND_CLUSTER_NAME")
 
     warn "Argo CD application $app did not become synced and healthy; collecting diagnostics"
     echo "::group::Argo CD application $app"
@@ -55,6 +57,14 @@ function _dump_argo_app_diagnostics {
     kubectl --context "kind-$KIND_CLUSTER_NAME" get application "$app" -n argocd \
         -o jsonpath='{.status.conditions}{"\n"}{.status.operationState.message}{"\n"}' || true
     kubectl --context "kind-$KIND_CLUSTER_NAME" get events -n argocd --sort-by=.lastTimestamp | tail -n 30 || true
+    destination_name=$(kubectl --context "kind-$KIND_CLUSTER_NAME" get application "$app" -n argocd \
+        -o jsonpath='{.spec.destination.name}' 2>/dev/null || true)
+    if [[ $destination_name == "infra-lab" ]]; then
+        workload_kubectl=(kubectl --kubeconfig /tmp/kubeconfig.yml)
+        info "Collecting $app workload resources from the infra-lab cluster"
+    else
+        info "Collecting $app workload resources from the in-cluster context"
+    fi
     namespace=$(kubectl --context "kind-$KIND_CLUSTER_NAME" get application "$app" -n argocd \
         -o jsonpath='{.spec.destination.namespace}' 2>/dev/null || true)
     if [[ -z $namespace ]]; then
@@ -64,17 +74,17 @@ function _dump_argo_app_diagnostics {
     fi
 
     echo "::group::Resources for $app in namespace $namespace"
-    kubectl --context "kind-$KIND_CLUSTER_NAME" get pods,deployments,daemonsets,statefulsets -n "$namespace" -o wide || true
-    kubectl --context "kind-$KIND_CLUSTER_NAME" get events -n "$namespace" --sort-by=.lastTimestamp | tail -n 40 || true
-    failed_pods=$(kubectl --context "kind-$KIND_CLUSTER_NAME" get pods -n "$namespace" --no-headers |
+    "${workload_kubectl[@]}" get pods,deployments,daemonsets,statefulsets -n "$namespace" -o wide || true
+    "${workload_kubectl[@]}" get events -n "$namespace" --sort-by=.lastTimestamp | tail -n 40 || true
+    failed_pods=$("${workload_kubectl[@]}" get pods -n "$namespace" --no-headers |
         awk '{split($2, readiness, "/"); if (readiness[1] != readiness[2] || $3 != "Running" || $4 != 0) print $1}' || true)
     while IFS= read -r pod; do
         [[ -n $pod ]] || continue
         echo "::group::Logs for $namespace/$pod"
-        kubectl --context "kind-$KIND_CLUSTER_NAME" describe "pod/$pod" -n "$namespace" || true
-        kubectl --context "kind-$KIND_CLUSTER_NAME" logs "pod/$pod" -n "$namespace" \
+        "${workload_kubectl[@]}" describe "pod/$pod" -n "$namespace" || true
+        "${workload_kubectl[@]}" logs "pod/$pod" -n "$namespace" \
             --all-containers=true --tail=100 --timestamps || true
-        kubectl --context "kind-$KIND_CLUSTER_NAME" logs "pod/$pod" -n "$namespace" \
+        "${workload_kubectl[@]}" logs "pod/$pod" -n "$namespace" \
             --all-containers=true --previous --tail=100 --timestamps || true
         echo "::endgroup::"
     done <<<"$failed_pods"

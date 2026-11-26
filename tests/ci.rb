@@ -52,6 +52,38 @@ class CiInfrastructureTest < Minitest::Test
     assert_includes File.read(File.join(ROOT, 'scripts/install.sh')), 'PKG="docker unzip"'
   end
 
+  def test_installer_retries_package_download_failures
+    Dir.mktmpdir do |directory|
+      bin = File.join(directory, 'bin')
+      FileUtils.mkdir_p(bin)
+      File.write(File.join(bin, 'curl'), <<~BASH)
+        #!/bin/bash
+        cat <<'SCRIPT'
+        attempt_file=${INSTALL_ATTEMPT_FILE:?}
+        attempt=$(($(cat "$attempt_file" 2>/dev/null || echo 0) + 1))
+        printf '%s' "$attempt" > "$attempt_file"
+        [[ -f ${APT_CONFIG:?} ]]
+        grep -q 'Acquire::ForceIPv4 "true"' "$APT_CONFIG"
+        grep -q 'Acquire::Retries "5"' "$APT_CONFIG"
+        [[ $attempt -gt 1 ]]
+        SCRIPT
+      BASH
+      File.write(File.join(bin, 'argocd'), "#!/bin/sh\nexit 0\n")
+      File.write(File.join(bin, 'sleep'), "#!/bin/sh\nexit 0\n")
+      FileUtils.chmod(0o755, Dir[File.join(bin, '*')])
+
+      attempts = File.join(directory, 'attempts')
+      output, errors, result = Open3.capture3(
+        { 'PATH' => "#{bin}:#{ENV.fetch('PATH')}", 'INSTALL_ATTEMPT_FILE' => attempts },
+        'bash', File.join(ROOT, 'scripts/install.sh')
+      )
+
+      assert result.success?, errors
+      assert_equal '2', File.read(attempts)
+      assert_includes errors, 'Package installation attempt 1/3 failed; retrying'
+    end
+  end
+
   def test_upgrade_validation_keeps_base_revision_and_prepares_its_harness
     steps = YAML.load_file(File.join(ROOT, '.github/workflows/on-demand.yml')).dig('jobs', 'validate', 'steps')
     checkout = steps.find { |step| step['uses']&.start_with?('actions/checkout@') }
@@ -85,7 +117,10 @@ class CiInfrastructureTest < Minitest::Test
           *"get application topolvm -n argocd -o jsonpath={.spec.destination.namespace}"*)
             printf 'topolvm-system\\n'
             ;;
-          *"get pods -n topolvm-system --no-headers"*)
+          *"get application topolvm -n argocd -o jsonpath={.spec.destination.name}"*)
+            printf 'infra-lab\\n'
+            ;;
+          *"--kubeconfig /tmp/kubeconfig.yml get pods -n topolvm-system --no-headers"*)
             printf 'topolvm-lvmd-0 0/1 CrashLoopBackOff 3 2m\\n'
             ;;
         esac
@@ -94,9 +129,10 @@ class CiInfrastructureTest < Minitest::Test
     BASH
     output, errors, result = Open3.capture3('bash', '-c', script, chdir: File.join(ROOT, 'scripts'))
     assert result.success?, errors
-    assert_includes errors, 'describe pod/topolvm-lvmd-0 -n topolvm-system'
-    assert_includes errors, 'logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --tail=100 --timestamps'
-    assert_includes errors, 'logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --previous --tail=100 --timestamps'
+    assert_includes output, 'Collecting topolvm workload resources from the infra-lab cluster'
+    assert_includes errors, '--kubeconfig /tmp/kubeconfig.yml describe pod/topolvm-lvmd-0 -n topolvm-system'
+    assert_includes errors, '--kubeconfig /tmp/kubeconfig.yml logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --tail=100 --timestamps'
+    assert_includes errors, '--kubeconfig /tmp/kubeconfig.yml logs pod/topolvm-lvmd-0 -n topolvm-system --all-containers=true --previous --tail=100 --timestamps'
   end
 
   def test_inventory_contains_each_nodes_roles

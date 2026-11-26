@@ -31,7 +31,9 @@ for component in $components; do
         kubectl get events -A --sort-by=.lastTimestamp | tail -n 60 || true
         kubectl get pods -A -o wide || true
         kubectl get pvc -A || true
-        kubectl get vmi -A -o wide || true
+        if ! kubectl get vmi -A -o wide; then
+            echo "::notice::VMI diagnostics unavailable; KubeVirt may not be installed for this component"
+        fi
         kubectl get namespaces || true
         printf '::endgroup::\n' >&2
         exit 1

@@ -24,6 +24,14 @@ Bootstrap synchronizes applications in dependency order.
 A failure in TopoLVM can prevent later applications from being created.
 Do not assume every application exists when investigating an interrupted bootstrap.
 
+## CI Package Downloads Fail
+
+Look for `Could not connect`, `Could not resolve host`, or `Failed to fetch`
+in the provisioning output. The installer retries package installation and
+configures apt to retry downloads over IPv4; if retries still fail, verify the
+runner's DNS and outbound access to the package and container registries named
+in the error.
+
 ## Argo CD Cannot Find A Git Path Or Revision
 
 ```bash
@@ -36,6 +44,15 @@ Confirm the manifests have been published to the branch Argo CD follows.
 Local changes and ignored topology overrides are not visible through Git.
 The parent `ci-infrastructure` application is created
 only after the platform bootstrap completes.
+
+For an application targeting the workload cluster, inspect its pods and events
+with the generated workload kubeconfig, not the management context:
+
+```bash
+kubectl --kubeconfig /tmp/kubeconfig.yml get pods -n topolvm-system -o wide
+kubectl --kubeconfig /tmp/kubeconfig.yml get events -n topolvm-system --sort-by=.lastTimestamp
+kubectl --kubeconfig /tmp/kubeconfig.yml logs -n topolvm-system deployment/topolvm-controller --all-containers=true
+```
 
 ## Kubean Does Not Complete The Cluster Installation
 
